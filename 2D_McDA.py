@@ -10,18 +10,19 @@ __status__     = "Prototype"
 
 import sys
 import os
+from datetime import datetime
 
 import numpy as np
 
 from my_modules.standard_outputs import print_time, print_elapsed_time
 from my_modules.readers.calipso_reader import CALIOPRegularGridReader, split_granule_date
+from my_modules.calipso_constants import *
+from my_modules.writers.hdf_writer import SDSData, write_hdf
+
 from config import NB_PROF_SLICE, NB_PROF_OVERLAP, NB_PROF_EDGE
 from surface_detection import detect_surface
 from feature_detection import detect_features
 from merged_3channels_feature_mask import merged_feature_masks
-from my_modules.calipso_constants import *
-from my_modules.writers.hdf_writer import SDSData, write_hdf
-from datetime import datetime
 
 
 def get_start_end_indexes(prof_min, prof_max, nb_prof_slice, nb_prof_overlap):
@@ -99,14 +100,14 @@ if __name__ == '__main__':
         TYPE_2D_McDA = sys.argv[11]
         OUT_FOLDER = sys.argv[12]
     else:
-        GRANULE_DATE = "2006-06-25T06-58-31ZN"
+        GRANULE_DATE = "2010-01-18T03-37-48ZN"
         VERSION_CAL_LID_L1 = "V4.51"
         TYPE_CAL_LID_L1 = "Standard"
         PREVIOUS_GRANULE = None
         NEXT_GRANULE = None
-        SLICE_START_END_TYPE = "profindex" # "profindex" or "longitude"
-        SLICE_START = 1000 # profindex or longitude, use "profindex" with None
-        SLICE_END = 1300 # profindex or longitude, use "profindex" with None
+        SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
+        SLICE_START = 170.68 # profindex or longitude, use "profindex" with None
+        SLICE_END = 27.93 # profindex or longitude, use "profindex" with None
         SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
         VERSION_2D_McDA = "V1.0.2"
         TYPE_2D_McDA = "Prototype"

@@ -8,11 +8,10 @@ import sys
 from numba import jit
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, './modules/')
-from standard_outputs import print_elapsed_time
-from config import *
-from calipso_constants import FILL_VALUE_FLOAT
+from my_modules.standard_outputs import print_elapsed_time
+from my_modules.calipso_constants import FILL_VALUE_FLOAT
 
+from config import *
 
 def apply_surface_detection(feature, surf_alt_index):
     """Put FLAG_SURFACE where and below the surface was detected"""
