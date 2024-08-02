@@ -13,14 +13,14 @@ import os
 
 import numpy as np
 
-from standard_outputs import print_time, print_elapsed_time
-from readers.calipso_reader import CALIOPRegularGridReader, split_granule_date
+from my_modules.standard_outputs import print_time, print_elapsed_time
+from my_modules.readers.calipso_reader import CALIOPRegularGridReader, split_granule_date
 from config import NB_PROF_SLICE, NB_PROF_OVERLAP, NB_PROF_EDGE
 from surface_detection import detect_surface
 from feature_detection import detect_features
 from merged_3channels_feature_mask import merged_feature_masks
-from calipso_constants import *
-from writers.hdf_writer import SDSData, write_hdf
+from my_modules.calipso_constants import *
+from my_modules.writers.hdf_writer import SDSData, write_hdf
 from datetime import datetime
 
 
