@@ -10,7 +10,7 @@ START_DATE=2010-06-01
 END_DATE=2010-06-01 # included
 SAVE_DEVELOPMENT_DATA="False" # if "True" save step by step data
 VERSION_2D_McDA="V1.0.2"
-TYPE_2D_McDA="Prototype"
+TYPE_2D_McDA="Release"
 #-----------------------------------------------------------------------
 # ICARE path
 DATA_FOLDER_L1_HEAD="/DATA/LIENS/CALIOP/CAL_LID_L1."

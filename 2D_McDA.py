@@ -111,7 +111,7 @@ if __name__ == '__main__':
         SLICE_END = 33.0 # profindex or longitude, use "profindex" with None
         SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
         VERSION_2D_McDA = "V1.0.2"
-        TYPE_2D_McDA = "Prototype"
+        TYPE_2D_McDA = "Release"
         OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
