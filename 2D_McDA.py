@@ -101,14 +101,14 @@ if __name__ == '__main__':
         TYPE_2D_McDA = sys.argv[11]
         OUT_FOLDER = sys.argv[12]
     else:
-        GRANULE_DATE = "2018-08-31T23-12-43ZN"
+        GRANULE_DATE = "2006-08-13T17-33-22ZN"
         VERSION_CAL_LID_L1 = "V4.51"
         TYPE_CAL_LID_L1 = "Standard"
         PREVIOUS_GRANULE = None
         NEXT_GRANULE = None
         SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
-        SLICE_START = 38.2 # profindex or longitude, use "profindex" with None
-        SLICE_END = 33.0 # profindex or longitude, use "profindex" with None
+        SLICE_START = 121.56 # profindex or longitude, use "profindex" with None
+        SLICE_END = 110.51 # profindex or longitude, use "profindex" with None
         SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
         VERSION_2D_McDA = "V1.0.3"
         TYPE_2D_McDA = "Dev"

@@ -885,19 +885,19 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     # Show elapsed time
     tic = print_elapsed_time(tic)
 
+    if False:
+        ############################################################
+        #### Correct sr signal below feature from transmittance ####
+        print("\t=> Correct sr signal below feature from transmittance using "\
+            f"fixed lidar ratio above and below {params.temp_ice_liquid} °C...", end='')
+        step += 1
+        sr_dict[step], twoway_transmittance_array[:, :] =\
+            transmission_correction(sr_dict[last_sr], sr, b_mol, feature_dict[last_feature],
+                                    temperature, params)
+        last_sr = step
 
-    ############################################################
-    #### Correct sr signal below feature from transmittance ####
-    print("\t=> Correct sr signal below feature from transmittance using "\
-          f"fixed lidar ratio above and below {params.temp_ice_liquid} °C...", end='')
-    step += 1
-    sr_dict[step], twoway_transmittance_array[:, :] =\
-        transmission_correction(sr_dict[last_sr], sr, b_mol, feature_dict[last_feature],
-                                temperature, params)
-    last_sr = step
-
-    # Show elapsed time
-    tic = print_elapsed_time(tic)
+        # Show elapsed time
+        tic = print_elapsed_time(tic)
 
 
     ########################################################
