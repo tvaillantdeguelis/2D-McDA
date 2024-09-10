@@ -1,4 +1,4 @@
-name: 2D_McDA_v1.0.4
+name: 2D_McDA_V1.0.4
 channels:
   - conda-forge
 dependencies:
@@ -228,6 +228,7 @@ dependencies:
   - zlib=1.2.11=h36c2ea0_1013
   - zstd=1.5.2=ha95c52a_0
   - pip:
-    - cdsapi==0.5.1
-    - ecmwf-api-client==1.6.3
-    - tqdm==4.63.0
+      - cdsapi==0.5.1
+      - ecmwf-api-client==1.6.3
+      - tqdm==4.63.0
+prefix: /work_users/vaillant/mambaforge/envs/2D_McDA_V1.0.4
