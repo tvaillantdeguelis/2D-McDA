@@ -9,7 +9,7 @@ TYPE_CAL_LID_L1="Standard"
 START_DATE=2010-06-01
 END_DATE=2010-06-01 # included
 SAVE_DEVELOPMENT_DATA="False" # if "True" save step by step data
-VERSION_2D_McDA="V1.0.3"
+VERSION_2D_McDA="V1.0.4"
 TYPE_2D_McDA="Dev"
 #-----------------------------------------------------------------------
 # ICARE path
