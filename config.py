@@ -93,7 +93,7 @@ class FeatureDetectionParameters():
         self.S_ice = 18 # effective lidar ratio for attenuation (all below -38 °C)
         self.temp_ice_liquid = -38 # transition temperature to determine the lidar ratio
         # twoway_transmittance_limit = 0.2 # don't correct more that this value of transmittance
-        self.twoway_transmittance_limit = 1.0 # no transmittance correction if 1.0
+        self.twoway_transmittance_limit = 0.1 # no transmittance correction if 1.0
         self.mult_scatt = 0.7 # multiple scattering factor
     
         # Determine extent below very high echo to flag as low confidence

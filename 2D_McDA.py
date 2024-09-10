@@ -107,9 +107,9 @@ if __name__ == '__main__':
         PREVIOUS_GRANULE = None
         NEXT_GRANULE = None
         SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
-        SLICE_START = 116.00 # profindex or longitude, use "profindex" with None
-        SLICE_END = 115.70 # profindex or longitude, use "profindex" with None
-        SAVE_DEVELOPMENT_DATA = True # if "True" save step by step data
+        SLICE_START = 121.56 # profindex or longitude, use "profindex" with None
+        SLICE_END = 110.51 # profindex or longitude, use "profindex" with None
+        SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
         VERSION_2D_McDA = "V1.0.4"
         TYPE_2D_McDA = "Dev"
         OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
@@ -577,30 +577,31 @@ if __name__ == '__main__':
                                             data_dict_2d_mcda_all_slices["Composite_Detection_Flags"])
     params['feature_mask_merged'].valid_range = (0, 255)
     params['feature_mask_merged'].dim_labels = ['Profile_ID', 'Altitude']
-    
-    # Parameters saved for development
-    if SAVE_DEVELOPMENT_DATA:
-    
+
+    if SAVE_DEVELOPMENT_DATA or True:
         # Add twoway_transmittance_532_par to params
         params['twoway_transmittance_532_par'] =\
             SDSData('Parallel_CumulativeTwoWayTransmittance_532',
                     data_dict_2d_mcda_dev["Parallel_CumulativeTwoWayTransmittance_532"], FILL_VALUE_FLOAT)
         params['twoway_transmittance_532_par'].valid_range = (0., 1.)
         params['twoway_transmittance_532_par'].dim_labels = ['Profile_ID', 'Altitude']
-    
+
         # Add twoway_transmittance_532_per to params
         params['twoway_transmittance_532_per'] =\
             SDSData('Perpendicular_CumulativeTwoWayTransmittance_532',
                     data_dict_2d_mcda_dev["Perpendicular_CumulativeTwoWayTransmittance_532"], FILL_VALUE_FLOAT)
         params['twoway_transmittance_532_per'].valid_range = (0., 1.)
         params['twoway_transmittance_532_per'].dim_labels = ['Profile_ID', 'Altitude']
-    
+
         # Add twoway_transmittance_1064 to params
         params['twoway_transmittance_1064'] =\
             SDSData('CumulativeTwoWayTransmittance_1064',
                     data_dict_2d_mcda_dev["CumulativeTwoWayTransmittance_1064"], FILL_VALUE_FLOAT)
         params['twoway_transmittance_1064'].valid_range = (0., 1.)
         params['twoway_transmittance_1064'].dim_labels = ['Profile_ID', 'Altitude']
+
+    # Parameters saved for development
+    if SAVE_DEVELOPMENT_DATA:
     
         # Add feature_mask_532_par_steps to params
         params['feature_mask_532_par_steps'] =\
