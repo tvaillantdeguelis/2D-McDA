@@ -107,9 +107,9 @@ if __name__ == '__main__':
         PREVIOUS_GRANULE = None
         NEXT_GRANULE = None
         SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
-        SLICE_START = 121.56 # profindex or longitude, use "profindex" with None
-        SLICE_END = 110.51 # profindex or longitude, use "profindex" with None
-        SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
+        SLICE_START = 116.00 # profindex or longitude, use "profindex" with None
+        SLICE_END = 115.70 # profindex or longitude, use "profindex" with None
+        SAVE_DEVELOPMENT_DATA = True # if "True" save step by step data
         VERSION_2D_McDA = "V1.0.3"
         TYPE_2D_McDA = "Dev"
         OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"

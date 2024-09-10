@@ -9,7 +9,7 @@ from numba import jit
 import matplotlib.pyplot as plt
 
 from my_modules.standard_outputs import print_elapsed_time
-from my_modules.calipso_constants import FILL_VALUE_FLOAT
+from my_modules.calipso_constants import *
 
 from config import *
 
@@ -442,11 +442,12 @@ def average_below_8_2(sr, sr_sigma):
     # Initialization
     new_sr = np.ma.copy(sr)  
     nb_prof = sr.shape[0] 
+    nb_bins_below_8_2km = N_30M_BINS_PER_BIN_R1*N_BINS_R1+N_30M_BINS_PER_BIN_R2*N_BINS_R2
 
-    # Look for horizontal offset if 1st profile not the start of a 1-km
-    # profile
-    if sr[0, 290] == sr[1, 290]:
-        if sr[1, 290] == sr[2, 290]:
+    # Look for horizontal offset if 1st profile not the start of a 1-km profile
+    index_vertical_bin = 100 # random bin in the R2 region 
+    if sr[0, index_vertical_bin] == sr[1, index_vertical_bin]:
+        if sr[1, index_vertical_bin] == sr[2, index_vertical_bin]:
             offset_h = 0
         else:
             offset_h = 2
@@ -455,7 +456,7 @@ def average_below_8_2(sr, sr_sigma):
 
     # Average 60 m × 1 km (2 verticals × 3 horizontals)
     i_array = np.arange(offset_h, nb_prof-2, 3) # 3 horizontals
-    j_array = np.arange(0, 290, 2) # 0:290 = below 8.2 km; 2 verticals
+    j_array = np.arange(0, nb_bins_below_8_2km, 2) # 2 verticals
     i_progress = 0
     for i in i_array:
         for j in j_array:
@@ -465,7 +466,7 @@ def average_below_8_2(sr, sr_sigma):
     new_sr.mask = np.copy(sr.mask)
 
     # Adapt SR threshold below 8.2 km
-    sr_sigma[:290] = sr_sigma[:290]/np.sqrt(6)
+    sr_sigma[:nb_bins_below_8_2km] = sr_sigma[:nb_bins_below_8_2km]/np.sqrt(6)
 
     return new_sr, sr_sigma
 
@@ -885,7 +886,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     # Show elapsed time
     tic = print_elapsed_time(tic)
 
-    if False:
+    if True:
         ############################################################
         #### Correct sr signal below feature from transmittance ####
         print("\t=> Correct sr signal below feature from transmittance using "\
