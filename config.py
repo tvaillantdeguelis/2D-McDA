@@ -128,10 +128,10 @@ def get_feature_detection_coef(channel, level):
        coded yet)"""
 
     if channel == '532_par':
-        k = [100,    20,        2,       1,       1]
-        n = [  1,     1,       60,     200,   10000]
-        s = [None, None, (11, 11), (3, 21), (9, 51)]
-        a = [None, None,     None,    None, (15, 5)]
+        k = [100,    20,        2,       1,     1]
+        n = [  1,     1,       60,     200,   100000]
+        s = [None, None, (11, 11), (3, 21), (17, 105)]
+        a = [None, None,     None,    None, (105, 35)]
 
     elif channel == '532_per':
         k = [500,   100,        2,       1,       1]
@@ -144,6 +144,25 @@ def get_feature_detection_coef(channel, level):
         n = [None,    1,       60,     200,   10000]
         s = [None, None, (11, 11), (3, 21), (9, 51)]
         a = [None, None,     None,    None, (15, 5)]
+
+    # Parameters from Table 1 in Vaillant de Guélis et al. (2021)
+    # if channel == '532_par':
+    #     k = [100,    20,        2,       1,     1]
+    #     n = [  1,     1,       60,     200,   10000]
+    #     s = [None, None, (11, 11), (3, 21), (9, 51)]
+    #     a = [None, None,     None,    None, (15, 5)]
+
+    # elif channel == '532_per':
+    #     k = [500,   100,        2,       1,       1]
+    #     n = [  1,     1,       60,     200,    1000]
+    #     s = [None, None, (11, 11), (3, 21), (9, 51)]
+    #     a = [None, None,     None,    None, (15, 5)]
+
+    # elif channel == '1064':
+    #     k = [None,   20,        2,       1,       1]
+    #     n = [None,    1,       60,     200,   10000]
+    #     s = [None, None, (11, 11), (3, 21), (9, 51)]
+    #     a = [None, None,     None,    None, (15, 5)]
 
     else:
         sys.exit(f"Unrecognized channel: {channel}")

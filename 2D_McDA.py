@@ -4,7 +4,7 @@
 """Main program of 2D-McDA. Takes granule to process as input."""
 
 __author__     = "Thibault Vaillant de Guélis"
-__version__    = "1.0.2"
+__version__    = "1.0.4"
 __email__      = "thibault.vaillantdeguelis@outlook.com"
 __status__     = "Prototype"
 
@@ -87,35 +87,37 @@ if __name__ == '__main__':
     
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
     # PARAMETERS
-    if len(sys.argv) > 1:
-        GRANULE_DATE = sys.argv[1]
-        VERSION_CAL_LID_L1 = sys.argv[2]
-        TYPE_CAL_LID_L1 = sys.argv[3]
-        PREVIOUS_GRANULE = None if sys.argv[4] == 'None' else sys.argv[4]
-        NEXT_GRANULE = None if sys.argv[5] == 'None' else sys.argv[5]
-        SLICE_START_END_TYPE = sys.argv[6] # 'profindex' or 'longitude'
-        SLICE_START = None if sys.argv[7] == 'None' else float(sys.argv[7])
-        SLICE_END = None if sys.argv[8] == 'None' else float(sys.argv[8])
-        SAVE_DEVELOPMENT_DATA = sys.argv[9] == 'True'
-        VERSION_2D_McDA = sys.argv[10]
-        TYPE_2D_McDA = sys.argv[11]
-        OUT_FOLDER = sys.argv[12]
-    else:
-        GRANULE_DATE = "2006-08-13T17-33-22ZN"
-        VERSION_CAL_LID_L1 = "V4.51"
-        TYPE_CAL_LID_L1 = "Standard"
-        PREVIOUS_GRANULE = None
-        NEXT_GRANULE = None
-        SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
-        SLICE_START = 121.56 # profindex or longitude, use "profindex" with None
-        SLICE_END = 110.51 # profindex or longitude, use "profindex" with None
-        SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
-        VERSION_2D_McDA = "V1.0.4"
-        TYPE_2D_McDA = "Dev"
-        OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
+    # if len(sys.argv) > 1:
+    #     GRANULE_DATE = sys.argv[1]
+    #     VERSION_CAL_LID_L1 = sys.argv[2]
+    #     TYPE_CAL_LID_L1 = sys.argv[3]
+    #     PREVIOUS_GRANULE = None if sys.argv[4] == 'None' else sys.argv[4]
+    #     NEXT_GRANULE = None if sys.argv[5] == 'None' else sys.argv[5]
+    #     SLICE_START_END_TYPE = sys.argv[6] # 'profindex' or 'longitude'
+    #     SLICE_START = None if sys.argv[7] == 'None' else float(sys.argv[7])
+    #     SLICE_END = None if sys.argv[8] == 'None' else float(sys.argv[8])
+    #     SAVE_DEVELOPMENT_DATA = sys.argv[9] == 'True'
+    #     VERSION_2D_McDA = sys.argv[10]
+    #     TYPE_2D_McDA = sys.argv[11]
+    #     OUT_FOLDER = sys.argv[12]
+    # else:
+    GRANULE_DATE = "2016-09-18T13-13-48ZD"
+    VERSION_CAL_LID_L1 = "V4.10"
+    TYPE_CAL_LID_L1 = "Standard"
+    FOLDER_PATH = "/home/vaillant/codes/projects/2D_CALIOP/2D_McDA/in/CAL_LID_L1_denoised/" #None # if None, it will try automatic path detection based on information in paths.py
+    PREVIOUS_GRANULE = None
+    NEXT_GRANULE = None
+    SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
+    SLICE_START = 6 # profindex or longitude, use "profindex" with None
+    SLICE_END = 2 # profindex or longitude, use "profindex" with None
+    SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
+    VERSION_2D_McDA = "V1.0.4"
+    TYPE_2D_McDA = "Dev"
+    OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
+    INDEX30M_ALT_MAX = 600
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
-        
+
     # ********************************
     # *** Configuration parameters ***
     print("\n*****Configuration parameters...*****")
@@ -123,6 +125,7 @@ if __name__ == '__main__':
     print("\tGRANULE_DATE =", GRANULE_DATE)
     print("\tVERSION_CAL_LID_L1 =", VERSION_CAL_LID_L1)
     print("\tTYPE_CAL_LID_L1 =", TYPE_CAL_LID_L1)
+    print("\tFOLDER_PATH =", FOLDER_PATH)
     print("\tPREVIOUS_GRANULE =", PREVIOUS_GRANULE)
     print("\tNEXT_GRANULE =", NEXT_GRANULE)
     print("\tSLICE_START_END_TYPE =", SLICE_START_END_TYPE)
@@ -145,7 +148,9 @@ if __name__ == '__main__':
                                      grid='333mx30m',
                                      slice_start=SLICE_START,
                                      slice_end=SLICE_END,
-                                     slice_start_end_type=SLICE_START_END_TYPE)
+                                     slice_start_end_type=SLICE_START_END_TYPE,
+                                     folderpath=FOLDER_PATH,
+                                     index30m_alt_max=INDEX30M_ALT_MAX)
 
     # Print filepaths of loading files
     print(f"\tGranule path: {cal_l1.filepath}")
@@ -297,7 +302,10 @@ if __name__ == '__main__':
                                                granule_date=GRANULE_DATE,
                                                grid='333mx30m',
                                                slice_start=prof_slice_min,
-                                               slice_end=prof_slice_max)
+                                               slice_end=prof_slice_max,
+                                               folderpath=FOLDER_PATH,
+                                               index30m_alt_max=INDEX30M_ALT_MAX)
+        
         data_dict_cal_lid_l1_slice = {}
         for key in cal_l1_keys:
             data_dict_cal_lid_l1_slice[key] = cal_l1_slice.get_data(key)
@@ -578,7 +586,7 @@ if __name__ == '__main__':
     params['feature_mask_merged'].valid_range = (0, 255)
     params['feature_mask_merged'].dim_labels = ['Profile_ID', 'Altitude']
 
-    if SAVE_DEVELOPMENT_DATA or True:
+    if SAVE_DEVELOPMENT_DATA:
         # Add twoway_transmittance_532_par to params
         params['twoway_transmittance_532_par'] =\
             SDSData('Parallel_CumulativeTwoWayTransmittance_532',
