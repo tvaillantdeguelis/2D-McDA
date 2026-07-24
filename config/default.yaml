@@ -1,0 +1,14 @@
+cal_lid_l1:
+  folder: "/DATA/LIENS/CALIOP"
+  version: "V5.00"
+  type: "Standard"
+  path_format: "CAL_LID_L1.{version}/{year}/{year}_{month:02d}_{day:02d}"
+
+algorithm:
+  version: "2.0.0"
+  process_up_to_40km: false
+  make_classification: true
+
+output:
+  folder: "/work_users/vaillant/data/2D_McDA/"
+  filetype: "netCDF"

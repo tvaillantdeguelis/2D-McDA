@@ -1,0 +1,5 @@
+include: default.yaml
+
+run:
+  mode: granule
+  granule: "2010-01-18T00-19-57ZN"

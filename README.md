@@ -1,10 +1,16 @@
-# 2D-McDA
+## Installation
 
-Two-dimensional and multi-channel feature detection algorithm for the CALIPSO lidar measurements.
+Create the Conda environment:
 
-## Python environment
+conda env create -n twod_mcda -f environment.yml
 
-Run `bash create_python_env.sh` to create a Python environment containing the needed packages to run this program.
+Activate it:
 
-Activate the Python environment with `conda activate env_name`.
+conda activate twod_mcda
 
+
+## Launch
+
+python scripts/run.py config/run_single.yaml
+
+python scripts/run.py config/run_period.yaml
