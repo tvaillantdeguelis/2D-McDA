@@ -1,0 +1,9 @@
+include: default.yaml
+
+granule:
+  granule: "2010-01-18T00-19-57ZN"
+
+slicing:
+  type: "profindex"           # "profindex" or "longitude"
+  start: null
+  end: null

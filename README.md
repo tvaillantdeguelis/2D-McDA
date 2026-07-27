@@ -9,8 +9,45 @@ Activate it:
 conda activate twod_mcda
 
 
+
+
+module load python
+
+python -m venv ~/venvs/twod_mcda
+
+source ~/venvs/twod_mcda/bin/activate
+
+python -m pip install -e .
+
+
+
+
+
+
 ## Launch
 
-python scripts/run.py config/run_single.yaml
+### Single granule processing
 
-python scripts/run.py config/run_period.yaml
+#### Local execution
+`python scripts/process_granule.py \
+    --config config/single_granule.yaml`
+
+#### Slurm execution
+`sbatch scripts/process_granule.sbatch \
+    config/single_granule.yaml`
+
+
+### Period processing
+
+#### Slurm execution
+`python scripts/submit_period.py \
+    --config config/period.yaml`
+
+
+## Author
+
+**Thibault Vaillant de Guélis**
+
+Research Scientist
+
+Email: thibault.vaillantdeguelis@outlook.com

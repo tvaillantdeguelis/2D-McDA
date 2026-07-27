@@ -4,11 +4,13 @@ cal_lid_l1:
   type: "Standard"
   path_format: "CAL_LID_L1.{version}/{year}/{year}_{month:02d}_{day:02d}"
 
-algorithm:
-  version: "2.0.0"
+processing:
+  save_development_data: false
   process_up_to_40km: false
-  make_classification: true
+  make_classification: false
 
 output:
   folder: "/work_users/vaillant/data/2D_McDA/"
+  path_format: "2D_McDA.{version}/{year}/{year}_{month:02d}_{day:02d}"
   filetype: "netCDF"
+

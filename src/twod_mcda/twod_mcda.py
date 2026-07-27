@@ -22,8 +22,8 @@ from my_modules.paths import split_granule_date
 
 from config import NB_PROF_SLICE, NB_PROF_OVERLAP, NB_PROF_EDGE
 from twod_mcda.surface import detect_surface
-from feature_detection import detect_features
-from merged_3channels_feature_mask import merged_feature_masks
+from twod_mcda.detection import detect_features
+from twod_mcda.merge import merged_feature_masks
 
 
 def get_start_end_indexes(prof_min, prof_max, nb_prof_slice, nb_prof_overlap):
@@ -87,34 +87,34 @@ if __name__ == '__main__':
     
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
     # PARAMETERS
-    # if len(sys.argv) > 1:
-    #     GRANULE_DATE = sys.argv[1]
-    #     VERSION_CAL_LID_L1 = sys.argv[2]
-    #     TYPE_CAL_LID_L1 = sys.argv[3]
-    #     PREVIOUS_GRANULE = None if sys.argv[4] == 'None' else sys.argv[4]
-    #     NEXT_GRANULE = None if sys.argv[5] == 'None' else sys.argv[5]
-    #     SLICE_START_END_TYPE = sys.argv[6] # 'profindex' or 'longitude'
-    #     SLICE_START = None if sys.argv[7] == 'None' else float(sys.argv[7])
-    #     SLICE_END = None if sys.argv[8] == 'None' else float(sys.argv[8])
-    #     SAVE_DEVELOPMENT_DATA = sys.argv[9] == 'True'
-    #     VERSION_2D_McDA = sys.argv[10]
-    #     TYPE_2D_McDA = sys.argv[11]
-    #     OUT_FOLDER = sys.argv[12]
-    # else:
-    GRANULE_DATE = "2016-09-18T13-13-48ZD"
-    VERSION_CAL_LID_L1 = "V4.10"
-    TYPE_CAL_LID_L1 = "Standard"
-    FOLDER_PATH = "/home/vaillant/codes/projects/2D_CALIOP/2D_McDA/in/CAL_LID_L1_denoised/" #None # if None, it will try automatic path detection based on information in paths.py
-    PREVIOUS_GRANULE = None
-    NEXT_GRANULE = None
-    SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
-    SLICE_START = 6 # profindex or longitude, use "profindex" with None
-    SLICE_END = 2 # profindex or longitude, use "profindex" with None
-    SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
-    VERSION_2D_McDA = "V1.0.4"
-    TYPE_2D_McDA = "Dev"
-    OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
-    INDEX30M_ALT_MAX = 600
+    if len(sys.argv) > 1:
+        GRANULE_DATE = sys.argv[1]
+        VERSION_CAL_LID_L1 = sys.argv[2]
+        TYPE_CAL_LID_L1 = sys.argv[3]
+        PREVIOUS_GRANULE = None if sys.argv[4] == 'None' else sys.argv[4]
+        NEXT_GRANULE = None if sys.argv[5] == 'None' else sys.argv[5]
+        SLICE_START_END_TYPE = sys.argv[6] # 'profindex' or 'longitude'
+        SLICE_START = None if sys.argv[7] == 'None' else float(sys.argv[7])
+        SLICE_END = None if sys.argv[8] == 'None' else float(sys.argv[8])
+        SAVE_DEVELOPMENT_DATA = sys.argv[9] == 'True'
+        VERSION_2D_McDA = sys.argv[10]
+        TYPE_2D_McDA = sys.argv[11]
+        OUT_FOLDER = sys.argv[12]
+    else:
+        GRANULE_DATE = "2016-09-18T13-13-48ZD"
+        VERSION_CAL_LID_L1 = "V4.10"
+        TYPE_CAL_LID_L1 = "Standard"
+        FOLDER_PATH = "/home/vaillant/codes/projects/2D_CALIOP/2D_McDA/in/CAL_LID_L1_denoised/" #None # if None, it will try automatic path detection based on information in paths.py
+        PREVIOUS_GRANULE = None
+        NEXT_GRANULE = None
+        SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
+        SLICE_START = 6 # profindex or longitude, use "profindex" with None
+        SLICE_END = 2 # profindex or longitude, use "profindex" with None
+        SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
+        VERSION_2D_McDA = "V1.0.4"
+        TYPE_2D_McDA = "Dev"
+        OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
+        INDEX30M_ALT_MAX = 600
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
 
