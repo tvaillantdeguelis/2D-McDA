@@ -34,11 +34,11 @@ def main():
 
 
     # Load YAML configuration.
-    config = load_config(args.config)
+    cfg = load_config(args.config)
 
 
     # Run the scientific processing pipeline.
-    process_granule(config)
+    process_granule(cfg)
 
 
 if __name__ == "__main__":

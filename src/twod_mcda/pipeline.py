@@ -1,75 +1,41 @@
-from twod_mcda import __version__
-import subprocess
+from datetime import datetime
+import time
 
-def git_version():
-    """
-    Return a string describing the current Git state of the code.
-
-    The function runs:
-        git describe --tags --dirty --always
-
-    Typical returned values:
-        - "v1.4.2"                       (exactly on a tag)
-        - "v1.4.2-5-g7a3f9c2"             (5 commits after tag v1.4.2)
-        - "v1.4.2-5-g7a3f9c2-dirty"       (uncommitted local changes)
-        - "g7a3f9c2"                      (no tags available)
-
-    If the code is not inside a Git repository or Git is not available,
-    the function returns None.
-    """
-    try:
-        # Call Git to obtain a human-readable description of the current commit
-        git_desc = subprocess.check_output(
-            ["git", "describe", "--tags", "--dirty", "--always"],
-            stderr=subprocess.DEVNULL
-        )
-
-        # Convert bytes to string and remove trailing newline
-        return git_desc.decode().strip()
-
-    except Exception:
-        # Git is not available or the code is not in a Git repository
-        return None
-
-
-def get_full_version():
-    """
-    Return the best possible version string for this code.
-
-    Priority order:
-        1. Use the Git-based version string (tag + commit hash),
-           which uniquely identifies the exact code state.
-        2. If Git information is unavailable, fall back to the static
-           Python version defined in __version__.
-
-    Returned values examples:
-        - "v1.4.2"
-        - "v1.4.2-5-g7a3f9c2"
-        - "v1.4.2-5-g7a3f9c2-dirty"
-    """
-    git_ver = git_version()
-
-    if git_ver is not None:
-        # Git information available: use it as the authoritative version
-        return git_ver
-    else:
-        # Fallback: use the static version defined in the code
-        return f"v{__version__}"
-
+from . import __version__
+from .models.granule import Granule
+from .version import get_full_version
+from .io.granule_finder import find_granule_file, find_neighbor_granules
+# from io.caliop_l1_reader import read_caliop_l1
 
 
 def process_granule(cfg):
 
-    # Algorithm version (from git)
-    VERSION_2D_MCDA = get_full_version()
+    start_time = datetime.now().astimezone()
+    start_tic = time.perf_counter()
+    print(f"Start time: {start_time}")
 
-    print(VERSION_2D_MCDA)
-
-    # prev, nxt = find_neighbor_granules(
-    #     cfg.granule.date, cfg.caliop.version_l1, cfg.caliop.type_l1, cfg.paths.data_root
-    # )
     
-    # data = read_l1_data(cfg)
+    # Get algorithm version (from git)
+    VERSION_2D_MCDA = get_full_version()
+    print(f"2D-McDA version: {VERSION_2D_MCDA}")
+
+
+    # Finding neighbor granules
+    granule_time = datetime.strptime(cfg["granule"]["granule"], "%Y-%m-%dT%H-%M-%SZN")
+    current_file = find_granule_file(cfg, granule_time)
+    previous_file, next_file = find_neighbor_granules(cfg, current_file)
+    print(f"Previous granule: {previous_file}")
+    print(f"Current granule : {current_file}")
+    print(f"Next granule    : {next_file}")
+
+
+    # # Reading CALIOP L1 data
+    # section_start = time.perf_counter()
+
+    # data = read_caliop_l1(cfg)
+
+    # print(f"Reading CALIOP L1 data: {time.perf_counter() - section_start:.1f} s")
+
 
     # data = detect_surface(data)
 
@@ -81,3 +47,9 @@ def process_granule(cfg):
     #     data = classify_features(data)
 
     # write_outputs(data, config)
+
+    end_time = datetime.now().astimezone()
+    total_time = time.perf_counter() - start_tic
+
+    print(f"End time: {end_time}")
+    print(f"Total runtime: {total_time:.1f} s")

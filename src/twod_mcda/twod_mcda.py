@@ -21,9 +21,9 @@ from my_modules.writers.hdf_writer import SDSData, write_hdf
 from my_modules.paths import split_granule_date
 
 from config import NB_PROF_SLICE, NB_PROF_OVERLAP, NB_PROF_EDGE
-from twod_mcda.surface import detect_surface
-from twod_mcda.detection import detect_features
-from twod_mcda.merge import merged_feature_masks
+from twod_mcda.detection.detect_surface import detect_surface
+from twod_mcda.detection.detect_features import detect_features
+from twod_mcda.merge.merge_masks import merged_feature_masks
 
 
 def get_start_end_indexes(prof_min, prof_max, nb_prof_slice, nb_prof_overlap):

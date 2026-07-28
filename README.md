@@ -2,20 +2,20 @@
 
 Create the Conda environment:
 
-conda env create -n twod_mcda -f environment.yml
+conda env create -n twod-mcda -f environment.yml
 
 Activate it:
 
-conda activate twod_mcda
+conda activate twod-mcda
 
 
 
 
 module load python
 
-python -m venv ~/venvs/twod_mcda
+python -m venv ~/venvs/twod-mcda
 
-source ~/venvs/twod_mcda/bin/activate
+source ~/venvs/twod-mcda/bin/activate
 
 python -m pip install -e .
 
@@ -29,12 +29,10 @@ python -m pip install -e .
 ### Single granule processing
 
 #### Local execution
-`python scripts/process_granule.py \
-    --config config/single_granule.yaml`
+`python scripts/process_granule.py --config config/single_granule.yaml`
 
 #### Slurm execution
-`sbatch scripts/process_granule.sbatch \
-    config/single_granule.yaml`
+`python scripts/submit_granule.py config/single_granule.yaml`
 
 
 ### Period processing

@@ -1,8 +1,8 @@
 cal_lid_l1:
   folder: "/DATA/LIENS/CALIOP"
-  version: "V5.00"
+  version: "5.00"
   type: "Standard"
-  path_format: "CAL_LID_L1.{version}/{year}/{year}_{month:02d}_{day:02d}"
+  path_format: "CAL_LID_L1.v{version}/{year}/{year}_{month:02d}_{day:02d}"
 
 processing:
   save_development_data: false
@@ -11,6 +11,6 @@ processing:
 
 output:
   folder: "/work_users/vaillant/data/2D_McDA/"
-  path_format: "2D_McDA.{version}/{year}/{year}_{month:02d}_{day:02d}"
+  path_format: "2D_McDA.v{version}/{year}/{year}_{month:02d}_{day:02d}"
   filetype: "netCDF"
 
