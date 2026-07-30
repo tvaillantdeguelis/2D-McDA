@@ -33,9 +33,7 @@ elif hostname[:4] == 'argo':
     # Tail paths format
     CALIOP_DATA_TAIL_PATH_FMT['L1'] = "LID_L1.-{data_type}-{version}/{year:d}/{month:02d}/"
 else:
-    # Explicit paths supplied by the pipeline remain usable on any machine.
-    # Automatic path detection will raise a focused error only when requested.
-    pass
+    raise Exception(f"Error: Data paths for {hostname} hostname not defined.\n")
     
 
 def get_caliop_data_tail_path(product, version, data_type, granule_date):
@@ -49,7 +47,7 @@ def get_caliop_data_tail_path(product, version, data_type, granule_date):
     :return: tail path where the data product file is stored
     """
 
-    from legacy.calipso_reader import split_granule_date
+    from readers.calipso_reader import split_granule_date
 
     granule_date_dict = split_granule_date(granule_date)
     if hostname[:5] == 'icare':

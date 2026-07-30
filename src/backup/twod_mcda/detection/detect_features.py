@@ -6,20 +6,9 @@ import numpy as np
 import sys
 from numba import jit
 
-from ..calipso_constants import *
+from .calipso_constants import *
 
-from ..config import *
-
-
-def feature_for_numba(feature):
-    mask = np.ma.getmaskarray(feature)
-    data = np.asarray(np.ma.getdata(feature)).copy()
-
-    # Empêche Numba de traiter les pixels masqués.
-    data[mask] = FLAG_SURFACE
-
-    return data, mask
-
+from config import *
 
 def apply_surface_detection(feature, surf_alt_index):
     """Put FLAG_SURFACE where and below the surface was detected"""
@@ -110,7 +99,7 @@ def apply_window(height_window, width_window, feature, FLAG_DETECTION_LEVEL, min
     # min_percent: min pourcentage of total counted pixels in the window to flag the center as "detected"
 
     # Initialization
-    new_feature, feature_mask = feature_for_numba(feature)
+    new_feature = np.ma.copy(feature)
 
     # height_window and width_window should be odd numbers
     if (height_window%2 != 1) | (width_window%2 != 1):
@@ -133,7 +122,7 @@ def apply_window(height_window, width_window, feature, FLAG_DETECTION_LEVEL, min
     # Replace by those which result from the windowing
     new_feature[detected_pixels==1] = FLAG_MAYBE
 
-    return np.ma.array(new_feature, mask=feature_mask)  
+    return new_feature
 
 
 @jit(nopython=True)
@@ -198,7 +187,6 @@ def replace_maybe_jit(nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL,
                                 c1 = seen_pixels[voisin]
                                 c2 = feature[voisin] == FLAG_MAYBE # level n
                                 c3 = False
-                                c4 = False
                                 if FLAG_DETECTION_LEVEL > 1: # if previous
                                                            # detection exists
                                     if prev_detect:
@@ -215,7 +203,7 @@ def replace_maybe_jit(nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL,
                                     accessible_pixels.append(voisin)
                                     pattern_pixels[voisin] = 1
                     
-                    count = int(np.round(np.sum(pattern_pixels)))
+                    count = np.int(np.round(np.sum(pattern_pixels)))
                     # remove the too small "maybe pattern"
                     px, py = np.where(pattern_pixels==1)
                     for pix_i in np.arange(px.size):
@@ -240,7 +228,7 @@ def replace_maybe(n, feature, FLAG_DETECTION_LEVEL, prev_detect=True,
     if prevprev_detect=True means that we also count detection pixels n-2"""
 
     # Initialization
-    new_feature, feature_mask = feature_for_numba(feature)
+    new_feature = np.ma.copy(feature)
 
     # Initialization
     seen_pixels = np.zeros(new_feature.shape, dtype=bool)
@@ -253,7 +241,7 @@ def replace_maybe(n, feature, FLAG_DETECTION_LEVEL, prev_detect=True,
         new_feature = replace_maybe_jit(n, new_feature, seen_pixels, FLAG_DETECTION_LEVEL,
                                         prev_detect, prevprev_detect)
 
-    return np.ma.array(new_feature, mask=feature_mask)
+    return new_feature
 
 
 def fill_likely_artifact(params, feature, FLAG_VERY_HIGH_ECHO):
@@ -424,26 +412,16 @@ def fill_small_strips_jit(feature, nb_prof_min):
 
 
 def fill_small_strips(params, feature):
-    """Flag short horizontal strips between low-confidence regions."""
+    """Flag 'Low confidence small strips' where strips of signal between 
+    (A)FA or 'Likely Artiafct' are horizontally less than 'nb_prof_min' 
+    profiles"""
 
-    feature_mask = np.ma.getmaskarray(feature)
+    # Initialization
+    new_feature = np.ma.copy(feature)  
 
-    new_feature = np.asarray(
-        np.ma.getdata(feature)
-    ).copy()
+    new_feature = fill_small_strips_jit(new_feature, params.nb_prof_min_small_strips)
 
-    # Valeur exclue des traitements dans la fonction JIT.
-    new_feature[feature_mask] = FLAG_SURFACE
-
-    new_feature = fill_small_strips_jit(
-        new_feature,
-        params.nb_prof_min_small_strips,
-    )
-
-    return np.ma.array(
-        new_feature,
-        mask=feature_mask,
-    )
+    return new_feature
 
 
 def remove_detect_from_sr(sr, feature):
@@ -594,15 +572,9 @@ def gaussian_line_window(width_window, gauss_sigma, sr, feature, sr_sigma):
     # Initialization
     nb_prof = sr.shape[0]
     nb_alt = sr.shape[1]
-    sr2 = np.ma.asarray(sr).filled(FILL_VALUE_FLOAT)
-
-    new_sr = np.full(
-        sr.shape,
-        FILL_VALUE_FLOAT,
-        dtype=float,
-    )
-
-    feature_values, _ = feature_for_numba(feature)
+    sr2 = np.ma.copy(sr)
+    sr2 = sr2.filled(FILL_VALUE_FLOAT) # fill mask value to use jit
+    new_sr = np.ma.ones(sr.shape)*FILL_VALUE_FLOAT
 
     # width_window should be odd numbers
     if width_window%2 != 1:
@@ -610,13 +582,10 @@ def gaussian_line_window(width_window, gauss_sigma, sr, feature, sr_sigma):
 
     # Apply gaussian line averaging
     new_sr, nb_prof_averaged = gaussian_line_window_jit(nb_prof, nb_alt, width_window, gauss_sigma,
-                                                        sr2, new_sr, FILL_VALUE_FLOAT, feature_values)
+                                                        sr2, new_sr, FILL_VALUE_FLOAT, feature)
     
     # Mask where FILL_VALUE_FLOAT
-    new_sr = np.ma.masked_where(
-        new_sr == FILL_VALUE_FLOAT,
-        new_sr,
-    )
+    new_sr[new_sr==FILL_VALUE_FLOAT] = np.ma.masked
 
     # Adapt SR threshold
     sr_sigma = sr_sigma/np.sqrt(nb_prof_averaged)
@@ -680,7 +649,7 @@ def gaussian_2d_window(width_window, horizontal_gauss_sigma, ab_signal, feature,
     new_ab = np.ma.ones(ab_signal.shape)*FILL_VALUE_FLOAT
     new_ab = new_ab.filled(FILL_VALUE_FLOAT)
     copy_feature = np.ma.copy(feature)  
-    copy_feature = np.ma.asarray(feature).filled(FLAG_SURFACE)
+    copy_feature = copy_feature.filled(FILL_VALUE_FLOAT)
 
     # width_window should be odd numbers
     if width_window%2 != 1:
@@ -698,6 +667,7 @@ def gaussian_2d_window(width_window, horizontal_gauss_sigma, ab_signal, feature,
     # Mask where FILL_VALUE_FLOAT
     new_ab = np.ma.masked_where(new_ab==FILL_VALUE_FLOAT, new_ab)
     ab2 = np.ma.masked_where(ab2==FILL_VALUE_FLOAT, ab2)
+    copy_feature = np.ma.masked_where(copy_feature==FILL_VALUE_FLOAT, copy_feature)
 
     # Adapt SR threshold
     ab_sigma = ab_sigma/np.sqrt(nb_prof_averaged)
@@ -743,6 +713,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = apply_surface_detection(feature_dict[last_feature], surf_alt_index)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic_function)
+
 
     #########################################
     #### Remove detected pixel from ATSR ####
@@ -750,6 +723,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #--------------------------------------------------------------------------
@@ -771,6 +747,10 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
                                              sr_sigma)
         last_feature = step
 
+        # Show elapsed time
+        tic = print_elapsed_time(tic)
+
+
         #######################################
         #### Replace 'maybe' by 'detected' ####
         print("\t\t- Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number "
@@ -778,6 +758,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
         step += 1
         feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
         last_feature = step
+
+        # Show elapsed time
+        tic = print_elapsed_time(tic)
 
 
         ################################
@@ -787,6 +770,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
         feature_dict[step] = fill_likely_artifact(params, feature_dict[last_feature],
                                                   FLAG_DETECTION_LEVEL)
         last_feature = step
+
+        # Show elapsed time
+        tic = print_elapsed_time(tic)
 
     # If 1064 nm, not used
     elif channel == '1064':
@@ -812,6 +798,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     #######################################
     #### Replace 'maybe' by 'detected' ####
@@ -821,6 +810,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
     #--------------------------------------------------------------------------
 
 
@@ -842,6 +833,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     #########################################
     #### Windowing on the 'maybe' pixels ####
@@ -849,6 +843,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     step += 1
     feature_dict[step] = apply_window(s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #######################################
@@ -859,6 +856,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
     #--------------------------------------------------------------------------
 
 
@@ -880,6 +879,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     #########################################
     #### Windowing on the 'maybe' pixels ####
@@ -887,6 +889,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     step += 1
     feature_dict[step] = apply_window(s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #######################################
@@ -897,6 +902,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
     #--------------------------------------------------------------------------
     
 
@@ -908,6 +915,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = fill_fully_attenuated(feature_dict[last_feature])
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #########################################
@@ -916,6 +925,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     ##############################
@@ -927,6 +939,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     sr_dict[step], sr_sigma = average_below_8_2(sr_dict[last_sr], sr_sigma)
     last_sr = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     ########################################################
     #### Flag almost FA where lidar signal is very weak ####
@@ -936,6 +951,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
                                           sr_sigma)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     #########################################
     #### Remove detected pixel from ATSR ####
@@ -943,6 +961,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     ############################################################
@@ -955,6 +976,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
                                 temperature, params)
     last_sr = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     ########################################################
@@ -966,6 +989,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     last_feature = step
     last_feature_before_averaging = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     #########################################
     #### Remove detected pixel from ATSR ####
@@ -973,6 +999,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #--------------------------------------------------------------------------
@@ -996,6 +1025,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
                                                    feature_dict[last_feature], sr_sigma)
     last_sr = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     ###################################################
     #### Apply threshold to get the 'maybe' pixels ####
@@ -1003,6 +1035,9 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     step += 1
     feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma)
     last_feature = step
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #########################################
@@ -1012,6 +1047,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = apply_window(s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #######################################
@@ -1022,6 +1059,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
     #--------------------------------------------------------------------------
 
 
@@ -1034,6 +1073,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
                                                     feature_dict[last_feature_before_averaging])
     last_feature = step
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #########################################
@@ -1042,6 +1083,10 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     ############################################################
     #### Transform feature and sr dictionaries to 3D arrays ####
@@ -1069,6 +1114,11 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
             continue   
         sr_array_steps[i_step, :, :] = sr_dict[i_step]
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
+
+    print(f'\t(Elapsed time: {datetime.now() - tic_function})')
 
     return feature_dict[last_feature], feature_array_steps, sr_array_steps,\
            twoway_transmittance_array

@@ -4,10 +4,10 @@
 from datetime import datetime
 import numpy as np
 
-from legacy.calipso_reader import range_from_altitude, rms_from_P_domain_to_betap_domain
-from ..calipso_constants import *
+from .io.calipso_reader import range_from_altitude, rms_from_P_domain_to_betap_domain
+from .calipso_constants import *
 
-from ..config import SurfaceDetectionParameters
+from config import SurfaceDetectionParameters
 
 FILL_VALUE_INT = 999
 
@@ -184,12 +184,18 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
         if (est_surf_alt[i] < np.min(alt)) | (est_surf_alt[i] > np.max(alt)):
             raise Exception(f"DEM surface_elevation[{i}] = {est_surf_alt[i]:.3f} looks uncorrect")
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic_function)
+
 
     ################################################
     #### Compute RMS in beta' domain at surface ####
     print("\t=> Compute RMS in beta' domain at surface...", end='')
     r_surf = range_from_altitude(alt_sat, est_surf_alt, caliop_lidar_tilt)
     rms_betap_surf = rms_from_P_domain_to_betap_domain(rms, r_surf, energy, gain, calib, pgr)
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
     
 
     #########################################################
@@ -197,18 +203,27 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
     print("\t=> Compute bin index of estimated surface altitude...", end='')
     est_surf_alt_index = np.argmin(np.abs(alt - est_surf_alt[:, np.newaxis]), axis=1)
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     ######################################
     #### Define surface search region ####
     print("\t=> Define surface search region...", end='')
     min_index_search_region, max_index_search_region =\
         surf_search_region(surf_type, est_surf_alt, est_surf_alt_index, alt, params)
+    
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     #############################
     #### Compute derivatives ####
     print("\t=> Compute derivatives...", end='')
     deriv = compute_deriv(ab, alt)
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     ##########################################
@@ -217,11 +232,17 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
     i_min, i_max, alt_min, alt_max = get_min_max_deriv(deriv, alt, min_index_search_region,
                                                        max_index_search_region)
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
 
     ######################################
     #### Get maximum signal magnitude ####
     print("\t=> Get maximum signal magnitude...", end='')
     ab_max, ab_argmax = get_max_ab_signal(ab, i_min, i_max)
+
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
 
 
     ###########################
@@ -231,11 +252,18 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
                                                   ab_argmax, params, rms_betap_surf, ab, deriv,
                                                   alt, channel)
 
+    # Show elapsed time
+    tic = print_elapsed_time(tic)
+
     
     ################################
     #### Remove false positives ####
     print("\t=> Remove false positives...", end='')
     i_surf, alt_surf = remove_false_pos(i_surf, alt_surf, params, est_surf_alt_index)
 
+    # Show elapsed time
+    print_elapsed_time(tic)
+
+    print(f'\t(Elapsed time: {datetime.now() - tic_function})')
 
     return i_surf

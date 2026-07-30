@@ -4,5 +4,5 @@ granule: "2010-01-18T00-19-57ZN"
 
 slicing:
   type: "profindex"           # "profindex" or "longitude"
-  start: null
-  end: null
+  start: 4000
+  end: 5000

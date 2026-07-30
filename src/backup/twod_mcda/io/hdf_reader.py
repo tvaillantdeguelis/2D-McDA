@@ -1,5 +1,3 @@
-import pyhdf.VS
-
 from pyhdf.HDF import HDF
 from pyhdf.SD import SD
 from pyhdf.error import HDF4Error

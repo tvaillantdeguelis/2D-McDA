@@ -89,38 +89,16 @@ def make_molecular_model(mol_ND_met, O3_ND_met, Z_met, Z_data, wl, polar=None):
         mol_ext_cross_sect  = 3.127e-32 # (m^2)
     
     # Handle fill values
-    mol_ND_met = replace_fillvalue_with_lowest_valid(
-        mol_ND_met,
-        positive_only=True,
-    )
+    mol_ND_met = replace_fillvalue_with_lowest_valid(mol_ND_met)
     O3_ND_met = replace_fillvalue_with_lowest_valid(O3_ND_met)
     
     if mol_ND_met is None or O3_ND_met is None:
         raise NoValidMolecularProfile("All molecular or ozone values are fill_value")
 
     # Interpolate (using log) to get density values for all lidar data alt
-    Z_met = np.asarray(np.ma.getdata(Z_met), dtype=float)
-
-    Z_data_array = np.ma.asarray(Z_data)
-    Z_data_values = np.asarray(np.ma.getdata(Z_data_array), dtype=float)
-    Z_data_mask = np.ma.getmaskarray(Z_data_array)
-
-    if np.any(Z_data_mask):
-        reference_altitudes = np.asarray(
-            LIDAR_DATA_ALTITUDES,
-            dtype=float,
-        )
-
-        if reference_altitudes.shape != Z_data_values.shape:
-            raise ValueError(
-                "LIDAR_DATA_ALTITUDES has an unexpected shape"
-            )
-
-        Z_data_values = Z_data_values.copy()
-        Z_data_values[Z_data_mask] = reference_altitudes[Z_data_mask]
-
-    Z_data = Z_data_values
-    
+    # Z_data = np.ma.filled(Z_data, -9999.) # pass in ndarray because masked
+    #                                       # arrays are not supported by interp
+    # mol_ND_data = get_full_density_array(mol_ND_met, Z_met, Z_data)
     interp_log_mol = interp1d(Z_met, np.log(mol_ND_met), bounds_error=False, fill_value="extrapolate")
     mol_ND_data = np.exp(interp_log_mol(Z_data))
     if False:
@@ -179,34 +157,17 @@ def make_molecular_model(mol_ND_met, O3_ND_met, Z_met, Z_data, wl, polar=None):
     return mol_ND_data, beta_mol, T2_mol, T2_O3
 
 
-def replace_fillvalue_with_lowest_valid(
-    ND_met,
-    fill_value=FILL_VALUE_FLOAT,
-    positive_only=False,
-):
-    """Replace masked/invalid values with the lowest valid value."""
-
-    array = np.ma.asarray(ND_met)
-    values = np.asarray(np.ma.getdata(array), dtype=float)
-
-    valid = (
-        ~np.ma.getmaskarray(array)
-        & np.isfinite(values)
-        & (values != fill_value)
-    )
-
-    if positive_only:
-        valid &= values > 0
-
-    if not np.any(valid):
+def replace_fillvalue_with_lowest_valid(ND_met, fill_value=-9999.):
+    """Replace fillValue (used for negative altitudes) by lowest altitude
+    where no fillValue in order to get correct values at altitude
+    close to 0 km after interpolation"""
+    valid = ND_met != fill_value
+    if np.any(valid):
+        lowest_valid = ND_met[valid][-1] 
+        ND_met = np.where(valid, ND_met, lowest_valid)
+        return ND_met
+    else:
         return None
-
-    lowest_valid = values[np.flatnonzero(valid)[-1]]
-
-    values = values.copy()
-    values[~valid] = lowest_valid
-
-    return values
     
 
 def get_full_density_array(metDensity, metAltitude, Z):

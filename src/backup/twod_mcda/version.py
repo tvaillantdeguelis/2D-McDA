@@ -1,7 +1,5 @@
 import subprocess
 
-from . import __version__
-
 def git_version():
     """
     Return a string describing the current Git state of the code.

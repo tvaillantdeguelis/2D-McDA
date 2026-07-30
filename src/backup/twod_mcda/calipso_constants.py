@@ -2,11 +2,9 @@
 This file contains constants that are defined in the CALIPSO products.
 """
 
-from pathlib import Path
 import numpy as np
 import os
 import pickle
-import sys
 
 WAVELENGTH_532 = 532
 WAVELENGTH_1064 = 1064
@@ -79,14 +77,10 @@ N_LAYERS_05KM_LAYER_PRODUCT = 15
 N_LAYERS_01KM_LAYER_PRODUCT = 10
 N_LAYERS_333M_LAYER_PRODUCT = 5
 
-LIDAR_ALTITUDES_FILE = (
-    Path(__file__).resolve().parents[1]
-    / "legacy"
-    / "lidar_data_altitudes.pkl"
-)
-
-with LIDAR_ALTITUDES_FILE.open("rb") as file:
-    LIDAR_DATA_ALTITUDES = pickle.load(file)["Lidar_Data_Altitudes"]
+# Lidar_Data_Altitudes from L1 data product (loaded from pickle file in my_modules)
+# It has been extracted from CAL_LID_L1-Standard-V4-11.2022-01-06T12-08-28ZN.hdf
+with open(os.path.join(os.path.dirname(__file__)) + "/lidar_data_altitudes.pkl", 'rb') as f:
+    LIDAR_DATA_ALTITUDES = pickle.load(f)['Lidar_Data_Altitudes']
 
 CALIPSO_STRFTIME_FMT = "%Y-%m-%dT%H-%M-%S"
 

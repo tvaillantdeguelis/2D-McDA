@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
 
-from twod_mcda.io.hdf_reader import HDF4Reader
-from twod_mcda.paths import CALIOP_DATA_HEAD_PATH, CALIOP_DATA_TAIL_PATH_FMT, \
+from .io.hdf_reader import HDF4Reader
+from .paths import CALIOP_DATA_HEAD_PATH, CALIOP_DATA_TAIL_PATH_FMT, \
     IIR_DATA_HEAD_PATH, IIR_DATA_TAIL_PATH_FMT, get_caliop_data_tail_path
-from twod_mcda.calipso_constants import *
-from twod_mcda.geotools import get_prof_min_max_indexes_from_lon
-from twod_mcda.calipso_calculator import compute_par_ab532, compute_ab_mol_and_b_mol, \
+from .calipso_constants import *
+from .geotools import get_prof_min_max_indexes_from_lon
+from .calipso_calculator import compute_par_ab532, compute_ab_mol_and_b_mol, \
     nsf_from_V_domain_to_betap_domain, rms_from_P_domain_to_betap_domain, compute_shotnoise, \
     compute_backgroundnoise, make_molecular_model
 
@@ -483,27 +483,12 @@ class CALIOPRegularGridReader():
     
     def layer2grid(self, data, alt_base, alt_top):
         """Replace layer properties in a grid using base and top altitudes"""
-        lidar_data_altitudes = LIDAR_DATA_ALTITUDES
-        if lidar_data_altitudes is None:
-            try:
-                lidar_data_altitudes = self.data_reader.get_data(
-                    "Lidar_Data_Altitudes"
-                )
-            except Exception as exc:
-                raise RuntimeError(
-                    "Lidar_Data_Altitudes is required to regrid layer data."
-                ) from exc
-
         data_grid = np.ma.ones((alt_base.shape[0], NUMBER_OF_VERTICAL_BINS))*FILL_VALUE_FLOAT
         for i_prof in np.arange(alt_base.shape[0]):
             for i_layer in np.arange(alt_base.shape[1]):
                 if not alt_top.mask[i_prof, i_layer]: # if not masked (i.e. if layer exists)
-                    alt_top_i = np.abs(
-                        alt_top[i_prof, i_layer] - lidar_data_altitudes
-                    ).argmin()
-                    alt_base_i = np.abs(
-                        alt_base[i_prof, i_layer] - lidar_data_altitudes
-                    ).argmin()
+                    alt_top_i = np.abs(alt_top[i_prof, i_layer] - LIDAR_DATA_ALTITUDES).argmin()
+                    alt_base_i = np.abs(alt_base[i_prof, i_layer] - LIDAR_DATA_ALTITUDES).argmin()
                     data_grid[i_prof, alt_top_i:alt_base_i+1] = data[i_prof, i_layer]
         data_grid = np.ma.masked_where(data_grid == FILL_VALUE_FLOAT, data_grid)
         return data_grid

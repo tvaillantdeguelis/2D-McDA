@@ -1,17 +1,3 @@
-import os
-import sys
-
-import numpy as np
-
-from legacy.calipso_reader import CALIOPRegularGridReader, split_granule_date
-from twod_mcda.calipso_constants import FILL_VALUE_FLOAT
-from twod_mcda.config import NB_PROF_EDGE, NB_PROF_OVERLAP, NB_PROF_SLICE
-from twod_mcda.detection.detect_features import detect_features
-from twod_mcda.detection.detect_surface import detect_surface
-from twod_mcda.io.hdf_writer import SDSData, write_hdf
-from twod_mcda.merge.merge_masks import merged_feature_masks
-
-
 def get_start_end_indexes(prof_min, prof_max, nb_prof_slice, nb_prof_overlap):
     """Compute start and end indexes of each slice of profiles to process
         Outputs: index_start_slice_array = array of slice start profile indexes
@@ -71,29 +57,20 @@ def rm_prof(array, nb_prof_to_remove, side):
 if __name__ == '__main__':
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
     # PARAMETERS
-    legacy_config = globals().get("LEGACY_CONFIG", {})
-    GRANULE_DATE = legacy_config.get("granule_date", "2016-09-18T13-13-48ZD")
-    VERSION_CAL_LID_L1 = legacy_config.get("cal_lid_l1_version", "V4.10")
-    TYPE_CAL_LID_L1 = legacy_config.get("cal_lid_l1_type", "Standard")
-    FOLDER_PATH = legacy_config.get(
-        "folder_path",
-        "/home/vaillant/codes/projects/2D_CALIOP/2D_McDA/in/CAL_LID_L1_denoised/",
-    )
-    PREVIOUS_GRANULE = legacy_config.get("previous_granule")
-    PREVIOUS_FOLDER_PATH = legacy_config.get("previous_folder_path")
-    NEXT_GRANULE = legacy_config.get("next_granule")
-    NEXT_FOLDER_PATH = legacy_config.get("next_folder_path")
-    SLICE_START_END_TYPE = legacy_config.get("slice_type", "longitude")
-    SLICE_START = legacy_config.get("slice_start", 6)
-    SLICE_END = legacy_config.get("slice_end", 2)
-    SAVE_DEVELOPMENT_DATA = legacy_config.get("save_development_data", False)
-    VERSION_2D_McDA = legacy_config.get("version_2d_mcda", "V1.0.4")
-    TYPE_2D_McDA = legacy_config.get("type_2d_mcda", "Dev")
-    OUT_FOLDER = legacy_config.get(
-        "out_folder",
-        "/work_users/vaillant/data/2D_CALIOP/2D_McDA/",
-    )
-    INDEX30M_ALT_MAX = legacy_config.get("index30m_alt_max", 600)
+    GRANULE_DATE = "2016-09-18T13-13-48ZD"
+    VERSION_CAL_LID_L1 = "V4.10"
+    TYPE_CAL_LID_L1 = "Standard"
+    FOLDER_PATH = "/home/vaillant/codes/projects/2D_CALIOP/2D_McDA/in/CAL_LID_L1_denoised/" #None # if None, it will try automatic path detection based on information in paths.py
+    PREVIOUS_GRANULE = None
+    NEXT_GRANULE = None
+    SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
+    SLICE_START = 6 # profindex or longitude, use "profindex" with None
+    SLICE_END = 2 # profindex or longitude, use "profindex" with None
+    SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
+    VERSION_2D_McDA = "V1.0.4"
+    TYPE_2D_McDA = "Dev"
+    OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
+    INDEX30M_ALT_MAX = 600
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
 
@@ -188,9 +165,7 @@ if __name__ == '__main__':
                                               grid='333mx30m',
                                               slice_start=-NB_PROF_OVERLAP,
                                               slice_end=None,
-                                              slice_start_end_type='profindex',
-                                              folderpath=PREVIOUS_FOLDER_PATH,
-                                              index30m_alt_max=INDEX30M_ALT_MAX)
+                                              slice_start_end_type='profindex')
     
         # Print filepaths of loading files
         print(f"\tPrevious granule path: {cal_l1_prev.filepath}")
@@ -210,9 +185,7 @@ if __name__ == '__main__':
                                               grid='333mx30m',
                                               slice_start=None,
                                               slice_end=NB_PROF_OVERLAP,
-                                              slice_start_end_type='profindex',
-                                              folderpath=NEXT_FOLDER_PATH,
-                                              index30m_alt_max=INDEX30M_ALT_MAX)
+                                              slice_start_end_type='profindex')
     
         # Print filepaths of loading files
         print(f"\tNext granule path: {cal_l1_next.filepath}")
