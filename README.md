@@ -1,10 +1,56 @@
-# 2D-McDA
+## Installation
 
-Two-dimensional and multi-channel feature detection algorithm for the CALIPSO lidar measurements.
+Create the Conda environment:
 
-## Python environment
+conda env create -n twod-mcda -f environment.yml
 
-Run `bash create_python_env.sh` to create a Python environment containing the needed packages to run this program.
+Activate it:
 
-Activate the Python environment with `conda activate env_name`.
+conda activate twod-mcda
 
+
+
+
+module load python
+
+python -m venv ~/venvs/twod-mcda
+
+source ~/venvs/twod-mcda/bin/activate
+
+python -m pip install -e .
+
+## Configuration
+
+The repository stores example configuration files under `config/*.yaml.example`.
+Copy the examples locally before running the pipeline:
+
+```bash
+cp config/default.yaml.example config/default.yaml
+cp config/period.yaml.example config/period.yaml
+cp config/single_granule.yaml.example config/single_granule.yaml
+```
+
+## Launch
+
+### Single granule processing
+
+#### Local execution
+`python scripts/process_granule.py config/single_granule.yaml`
+
+#### Slurm execution
+`python scripts/submit_granule.py config/single_granule.yaml`
+
+
+### Period processing
+
+#### Slurm execution
+`python scripts/submit_period.py config/period.yaml`
+
+
+## Author
+
+**Thibault Vaillant de Guélis**
+
+Research Scientist
+
+Email: thibault.vaillantdeguelis@outlook.com
