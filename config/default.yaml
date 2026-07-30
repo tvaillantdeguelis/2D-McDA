@@ -13,4 +13,3 @@ output:
   folder: "/work_users/vaillant/data/2D_McDA/"
   path_format: "2D_McDA.v{version}/{year}/{year}_{month:02d}_{day:02d}"
   filetype: "netCDF"
-

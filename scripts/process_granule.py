@@ -16,28 +16,21 @@ from twod_mcda.pipeline import process_granule
 
 
 def main():
+    """Parse command-line arguments and process one CALIOP granule."""
 
-    # Create the command-line argument parser
     parser = argparse.ArgumentParser(
-        description="Process one CALIOP granule"
+        description="Process one CALIOP granule."
     )
 
-    # YAML configuration file containing the processing parameters
     parser.add_argument(
-        "--config",
-        required=True,
-        help="Path to the YAML configuration file",
+        "config_file",
+        help="Path to the YAML configuration file.",
     )
 
-    # Parse command-line arguments
     args = parser.parse_args()
 
+    cfg = load_config(args.config_file)
 
-    # Load YAML configuration.
-    cfg = load_config(args.config)
-
-
-    # Run the scientific processing pipeline.
     process_granule(cfg)
 
 

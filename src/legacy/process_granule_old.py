@@ -1,31 +1,3 @@
-#!/usr/bin/env python
-# coding: utf8
-
-"""Main program of 2D-McDA. Takes granule to process as input."""
-
-__author__     = "Thibault Vaillant de Guélis"
-__version__    = "1.0.4"
-__email__      = "thibault.vaillantdeguelis@outlook.com"
-__status__     = "Prototype"
-
-import sys
-import os
-from datetime import datetime
-
-import numpy as np
-
-from my_modules.standard_outputs import print_time, print_elapsed_time
-from my_modules.readers.calipso_reader import CALIOPRegularGridReader
-from my_modules.calipso_constants import *
-from my_modules.writers.hdf_writer import SDSData, write_hdf
-from my_modules.paths import split_granule_date
-
-from config import NB_PROF_SLICE, NB_PROF_OVERLAP, NB_PROF_EDGE
-from twod_mcda.detection.detect_surface import detect_surface
-from twod_mcda.detection.detect_features import detect_features
-from twod_mcda.merge.merge_masks import merged_feature_masks
-
-
 def get_start_end_indexes(prof_min, prof_max, nb_prof_slice, nb_prof_overlap):
     """Compute start and end indexes of each slice of profiles to process
         Outputs: index_start_slice_array = array of slice start profile indexes
@@ -83,38 +55,22 @@ def rm_prof(array, nb_prof_to_remove, side):
 
 
 if __name__ == '__main__':
-    tic_main_program = print_time()
-    
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
     # PARAMETERS
-    if len(sys.argv) > 1:
-        GRANULE_DATE = sys.argv[1]
-        VERSION_CAL_LID_L1 = sys.argv[2]
-        TYPE_CAL_LID_L1 = sys.argv[3]
-        PREVIOUS_GRANULE = None if sys.argv[4] == 'None' else sys.argv[4]
-        NEXT_GRANULE = None if sys.argv[5] == 'None' else sys.argv[5]
-        SLICE_START_END_TYPE = sys.argv[6] # 'profindex' or 'longitude'
-        SLICE_START = None if sys.argv[7] == 'None' else float(sys.argv[7])
-        SLICE_END = None if sys.argv[8] == 'None' else float(sys.argv[8])
-        SAVE_DEVELOPMENT_DATA = sys.argv[9] == 'True'
-        VERSION_2D_McDA = sys.argv[10]
-        TYPE_2D_McDA = sys.argv[11]
-        OUT_FOLDER = sys.argv[12]
-    else:
-        GRANULE_DATE = "2016-09-18T13-13-48ZD"
-        VERSION_CAL_LID_L1 = "V4.10"
-        TYPE_CAL_LID_L1 = "Standard"
-        FOLDER_PATH = "/home/vaillant/codes/projects/2D_CALIOP/2D_McDA/in/CAL_LID_L1_denoised/" #None # if None, it will try automatic path detection based on information in paths.py
-        PREVIOUS_GRANULE = None
-        NEXT_GRANULE = None
-        SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
-        SLICE_START = 6 # profindex or longitude, use "profindex" with None
-        SLICE_END = 2 # profindex or longitude, use "profindex" with None
-        SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
-        VERSION_2D_McDA = "V1.0.4"
-        TYPE_2D_McDA = "Dev"
-        OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
-        INDEX30M_ALT_MAX = 600
+    GRANULE_DATE = "2016-09-18T13-13-48ZD"
+    VERSION_CAL_LID_L1 = "V4.10"
+    TYPE_CAL_LID_L1 = "Standard"
+    FOLDER_PATH = "/home/vaillant/codes/projects/2D_CALIOP/2D_McDA/in/CAL_LID_L1_denoised/" #None # if None, it will try automatic path detection based on information in paths.py
+    PREVIOUS_GRANULE = None
+    NEXT_GRANULE = None
+    SLICE_START_END_TYPE = "longitude" # "profindex" or "longitude"
+    SLICE_START = 6 # profindex or longitude, use "profindex" with None
+    SLICE_END = 2 # profindex or longitude, use "profindex" with None
+    SAVE_DEVELOPMENT_DATA = False # if "True" save step by step data
+    VERSION_2D_McDA = "V1.0.4"
+    TYPE_2D_McDA = "Dev"
+    OUT_FOLDER="/work_users/vaillant/data/2D_CALIOP/2D_McDA/"
+    INDEX30M_ALT_MAX = 600
     # <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
 
@@ -287,13 +243,9 @@ if __name__ == '__main__':
         print("\n\n############################################################\n"
               f"Processing slice with profile indexes from {prof_slice_min} to {prof_slice_max}...")
         
-        tic_slice = print_time()
-        
         # ***********************
         # *** Load slice data ***
         print("\n\n*****Load slice data...*****")
-        
-        tic = datetime.now()
         
         # Load data for the slice
         cal_l1_slice = CALIOPRegularGridReader(product='L1',
@@ -355,9 +307,7 @@ if __name__ == '__main__':
         elif (prof_slice_max == cal_l1.prof_max) & (NEXT_GRANULE is None):
             print("\tNo next file to load. Last profiles not processed.")
         
-        tic = print_elapsed_time(tic, '\t')
-        
-    
+
         # *************************
         # *** Surface detection ***
         print("\n\n*****Surface detection...*****")
@@ -515,9 +465,7 @@ if __name__ == '__main__':
                 data_dict_2d_mcda_all_slices[key][prof_store_min+NB_PROF_EDGE:prof_store_max-NB_PROF_EDGE+1, :] = \
                     data_dict_2d_mcda[key][NB_PROF_EDGE:-NB_PROF_EDGE, :]
         
-        print_elapsed_time(tic_slice)
-    
-    
+ 
     # *****************************
     # *** Save data in HDF file ***
     print("\n\n############################################################\n"\
@@ -667,6 +615,4 @@ if __name__ == '__main__':
                f"{GRANULE_DATE}{filename_end}.hdf"
     write_hdf(outdata_folder+"/"+filename, params)
     
-    
-    print_time(tic_main_program)
     

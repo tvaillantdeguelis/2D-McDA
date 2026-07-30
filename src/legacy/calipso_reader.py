@@ -5,13 +5,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
 
-from readers.hdf_reader import HDF4Reader
-from paths import CALIOP_DATA_HEAD_PATH, CALIOP_DATA_TAIL_PATH_FMT, \
+from .io.hdf_reader import HDF4Reader
+from .paths import CALIOP_DATA_HEAD_PATH, CALIOP_DATA_TAIL_PATH_FMT, \
     IIR_DATA_HEAD_PATH, IIR_DATA_TAIL_PATH_FMT, get_caliop_data_tail_path
-from calipso_constants import *
-from geotools import get_prof_min_max_indexes_from_lon
-from standard_outputs import print_time
-from calipso_calculator import compute_par_ab532, compute_ab_mol_and_b_mol, \
+from .calipso_constants import *
+from .geotools import get_prof_min_max_indexes_from_lon
+from .calipso_calculator import compute_par_ab532, compute_ab_mol_and_b_mol, \
     nsf_from_V_domain_to_betap_domain, rms_from_P_domain_to_betap_domain, compute_shotnoise, \
     compute_backgroundnoise, make_molecular_model
 

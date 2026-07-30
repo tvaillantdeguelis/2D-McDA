@@ -1,11 +1,13 @@
 from datetime import datetime
 import time
 
-from . import __version__
-from .models.granule import Granule
+from .io.granule_finder import (
+    find_granule_file,
+    find_neighbor_granules,
+)
+from .io.caliop_l1_reader import read_caliop_l1
+from .io.caliop_l1_variables import CALIOP_L1_NATIVE_VARIABLES
 from .version import get_full_version
-from .io.granule_finder import find_granule_file, find_neighbor_granules
-# from io.caliop_l1_reader import read_caliop_l1
 
 
 def process_granule(cfg):
@@ -21,7 +23,7 @@ def process_granule(cfg):
 
 
     # Finding neighbor granules
-    granule_time = datetime.strptime(cfg["granule"]["granule"], "%Y-%m-%dT%H-%M-%SZN")
+    granule_time = datetime.strptime(cfg["granule"], "%Y-%m-%dT%H-%M-%SZN")
     current_file = find_granule_file(cfg, granule_time)
     previous_file, next_file = find_neighbor_granules(cfg, current_file)
     print(f"Previous granule: {previous_file}")
@@ -29,27 +31,46 @@ def process_granule(cfg):
     print(f"Next granule    : {next_file}")
 
 
-    # # Reading CALIOP L1 data
-    # section_start = time.perf_counter()
+    raw_data = read_caliop_l1(
+        current_file,
+        variables=CALIOP_L1_NATIVE_VARIABLES,
+    )
 
-    # data = read_caliop_l1(cfg)
+    # regular_data = preprocess_caliop_l1(
+    #     raw_data,
+    #     target_grid="333mx30m",
+    # )
 
-    # print(f"Reading CALIOP L1 data: {time.perf_counter() - section_start:.1f} s")
+    # slice_bounds = get_slice_bounds(
+    #     reader.prof_min,
+    #     reader.prof_max,
+    #     NB_PROF_SLICE,
+    #     NB_PROF_OVERLAP,
+    # )
 
+    # for profile_start, profile_end in zip(*slice_bounds):
+    #     slice_result = process_slice(
+    #         cfg=cfg,
+    #         current_file=current_file,
+    #         previous_file=previous_file,
+    #         next_file=next_file,
+    #         profile_start=profile_start,
+    #         profile_end=profile_end,
+    #     )
 
-    # data = detect_surface(data)
+    #     store_slice_result(
+    #         output_data,
+    #         slice_result,
+    #     )
 
-    # data = detect_features(data)
-
-    # data = merge_feature_masks(data)
-
-    # if config.processing.make_classification:
-    #     data = classify_features(data)
-
-    # write_outputs(data, config)
+    # write_output(
+    #     cfg,
+    #     output_data,
+    # )
 
     end_time = datetime.now().astimezone()
     total_time = time.perf_counter() - start_tic
 
     print(f"End time: {end_time}")
     print(f"Total runtime: {total_time:.1f} s")
+

@@ -3,13 +3,10 @@
 
 from datetime import datetime
 import numpy as np
-import os
 import sys
 from numba import jit
-import matplotlib.pyplot as plt
 
-from my_modules.standard_outputs import print_elapsed_time
-from my_modules.calipso_constants import *
+from .calipso_constants import *
 
 from config import *
 

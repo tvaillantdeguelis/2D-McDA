@@ -29,7 +29,7 @@ python -m pip install -e .
 ### Single granule processing
 
 #### Local execution
-`python scripts/process_granule.py --config config/single_granule.yaml`
+`python scripts/process_granule.py config/single_granule.yaml`
 
 #### Slurm execution
 `python scripts/submit_granule.py config/single_granule.yaml`
@@ -38,8 +38,7 @@ python -m pip install -e .
 ### Period processing
 
 #### Slurm execution
-`python scripts/submit_period.py \
-    --config config/period.yaml`
+`python scripts/submit_period.py config/period.yaml`
 
 
 ## Author

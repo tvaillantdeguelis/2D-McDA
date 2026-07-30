@@ -9,19 +9,43 @@ import yaml
 
 
 def load_config(filename):
+    """
+    Load a YAML configuration file and merge it with its default configuration.
+
+    Parameters
+    ----------
+    filename : str or Path
+        Path to the YAML configuration file.
+
+    Returns
+    -------
+    dict
+        Complete configuration dictionary used by the processing scripts.
+    """
 
     filename = Path(filename)
 
-    with open(filename, "r") as f:
+    # Read the user configuration file.
+    # This file contains the parameters specific to the current run.
+    with open(filename) as f:
         config = yaml.safe_load(f)
 
-    # Load included default configuration
+    # Return already complete configurations unchanged.
+    if "include" not in config:
+        return config
+
+    # Read the default configuration file referenced by the "include" key.
+    # The default file contains common parameters shared by all runs.
     include_file = filename.parent / config["include"]
 
-    with open(include_file, "r") as f:
-        default_config = yaml.safe_load(f)
+    with open(include_file) as f:
+        base_config = yaml.safe_load(f)
 
-    default_config.update(
+    # Update the default configuration with values from the current run.
+    # Parameters defined in the run configuration overwrite default values.
+    # The "include" entry is only used to locate the default file and is not
+    # kept in the final configuration dictionary.
+    base_config.update(
         {
             key: value
             for key, value in config.items()
@@ -29,6 +53,4 @@ def load_config(filename):
         }
     )
 
-    config = default_config
-
-    return config
+    return base_config

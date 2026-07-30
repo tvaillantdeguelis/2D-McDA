@@ -1,172 +1,169 @@
 #!/usr/bin/env python3
 
-from pathlib import Path
-from datetime import datetime, timedelta
 import argparse
-import re
+import os
 import subprocess
+import time
+from copy import deepcopy
+from datetime import datetime, timedelta
+from pathlib import Path
+
 import yaml
 
-from config import load_config
+from config_loader import load_config
+from submit_granule import submit_granule
+from twod_mcda.io.granule_finder import find_granules_between_dates
 
 
-GRANULE_PATTERN = re.compile(
-    r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z[ND]"
-)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RUNS_ROOT = PROJECT_ROOT / "runs"
 
 
-def find_granules(config):
+def count_user_jobs():
+    """
+    Return the number of pending or running Slurm jobs for the current user.
 
-    folder = Path(
-        config["cal_lid_l1"]["folder"]
-    )
+    Returns
+    -------
+    int
+        Number of jobs currently visible in the Slurm queue.
+    """
 
-    path_format = config["cal_lid_l1"]["path_format"]
-
-    version = config["cal_lid_l1"]["version"]
-
-
-    start = datetime.fromisoformat(
-        config["period"]["start_date"]
-    )
-
-    end = datetime.fromisoformat(
-        config["period"]["end_date"]
-    )
-
-
-    granules = []
-
-
-    current = start
-
-    while current <= end:
-
-        directory = folder / path_format.format(
-            version=version,
-            year=current.year,
-            month=current.month,
-            day=current.day,
-        )
-
-
-        if directory.exists():
-
-            for filename in directory.iterdir():
-
-                match = GRANULE_PATTERN.search(
-                    filename.name
-                )
-
-                if match:
-                    granules.append(
-                        match.group(0)
-                    )
-
-
-        current += timedelta(days=1)
-
-
-    return sorted(set(granules))
-
-
-def create_granule_configs(
-    config_file,
-    granules,
-    output_dir,
-):
-
-    output_dir.mkdir(
-        exist_ok=True
-    )
-
-
-    yaml_files = []
-
-
-    for index, granule in enumerate(granules):
-
-        filename = (
-            output_dir /
-            f"granule_{index:06d}.yaml"
-        )
-
-
-        content = {
-            "include": "../config/default.yaml",
-            "granule": {
-                "granule": granule
-            },
-            "slicing": {
-                "type": "profindex",
-                "start": None,
-                "end": None,
-            },
-        }
-
-
-        with open(filename, "w") as f:
-            yaml.safe_dump(
-                content,
-                f,
-            )
-
-
-        yaml_files.append(filename)
-
-
-    return yaml_files
-
-
-def submit_array(yaml_files, max_parallel_jobs):
-
-    list_file = Path("tmp/yaml_files.txt")
-
-    with open(list_file, "w") as f:
-
-        for filename in yaml_files:
-            f.write(
-                str(filename) + "\n"
-            )
-
-
-    nb_jobs = len(yaml_files)
-
-
-    subprocess.run(
+    result = subprocess.run(
         [
-            "sbatch",
-            f"--array=0-{nb_jobs-1}%{max_parallel_jobs}",
-            "scripts/run_granule_array.sbatch",
-            str(list_file),
+            "squeue",
+            "--noheader",
+            "--user",
+            os.environ["USER"],
+            "--states",
+            "PENDING,RUNNING",
+            "--format",
+            "%i",
         ],
+        capture_output=True,
+        text=True,
         check=True,
     )
 
+    return len(result.stdout.splitlines())
+
+
+def create_granule_config(cfg, granule):
+    """
+    Create a YAML configuration file for one CALIOP granule.
+
+    Parameters
+    ----------
+    cfg : dict
+        Base processing configuration.
+    granule : str
+        CALIOP granule identifier.
+
+    Returns
+    -------
+    Path
+        Path to the generated YAML configuration file.
+    """
+
+    run_cfg = deepcopy(cfg)
+    run_cfg["granule"] = granule
+
+    year = granule[:4]
+    month = granule[:7]
+
+    run_dir = RUNS_ROOT / year / month
+    run_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    config_file = run_dir / f"{granule}.yaml"
+
+    with config_file.open(
+        "w",
+        encoding="utf-8",
+    ) as file:
+        yaml.safe_dump(
+            run_cfg,
+            file,
+            sort_keys=False,
+        )
+
+    return config_file
+
+
+def submit_period(config_file):
+    """
+    Submit one Slurm processing job per granule in a given period.
+
+    Parameters
+    ----------
+    config_file : str or Path
+        Path to the YAML period configuration file.
+    """
+
+    config_file = Path(config_file).resolve()
+
+    if not config_file.is_file():
+        raise FileNotFoundError(
+            f"Configuration file not found: {config_file}"
+        )
+
+    cfg = load_config(config_file)
+
+    start_date = datetime.strptime(
+        cfg["period"]["start_date"],
+        "%Y-%m-%d",
+    )
+
+    # Use an exclusive upper bound so the complete final day is included.
+    end_date = datetime.strptime(
+        cfg["period"]["end_date"],
+        "%Y-%m-%d",
+    ) + timedelta(days=1)
+
+    max_parallel_jobs = cfg["slurm"]["max_parallel_jobs"]
+
+    granules = find_granules_between_dates(
+        cfg,
+        start_date,
+        end_date,
+    )
+
+    print(f"Found {len(granules)} granules.")
+
+    for granule in granules:
+        while count_user_jobs() >= max_parallel_jobs:
+            time.sleep(5)
+
+        granule_config_file = create_granule_config(
+            cfg,
+            granule,
+        )
+
+        print(f"Submitting {granule}")
+
+        submit_granule(granule_config_file)
+
 
 def main():
+    """Parse command-line arguments and submit a processing period."""
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description=(
+            "Submit CALIOP granule processing jobs for a given period."
+        )
+    )
 
-    parser.add_argument("--config", required=True)
+    parser.add_argument(
+        "config_file",
+        type=Path,
+        help="Path to the YAML period configuration file.",
+    )
 
     args = parser.parse_args()
 
-    config = load_config(args.config)
-
-    max_parallel_jobs = config["slurm"]["max_parallel_jobs"]
-
-    granules = find_granules(config)
-
-    print(f"{len(granules)} granules found")
-
-    yaml_files = create_granule_configs(
-        args.config,
-        granules,
-        Path("tmp"),
-    )
-
-    submit_array(yaml_files, max_parallel_jobs)
+    submit_period(args.config_file)
 
 
 if __name__ == "__main__":

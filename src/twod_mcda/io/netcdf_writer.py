@@ -1,6 +1,5 @@
 from netCDF4 import Dataset
 import os
-import sys
 import numpy as np
 
 # Format type: 'S1' or 'c' (NC_CHAR), 'i1' or 'b' or 'B' (NC_BYTE), 'u1' (NC_UBYTE),

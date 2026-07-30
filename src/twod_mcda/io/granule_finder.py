@@ -106,6 +106,69 @@ def find_granule_file(cfg, granule_time):
     )
 
 
+def find_granules_between_dates(cfg, start_date, end_date):
+    """
+    Find all CALIOP granules between two dates.
+
+    Parameters
+    ----------
+    cfg : dict
+        Processing configuration.
+
+    start_date : datetime
+        Start of the search period.
+
+    end_date : datetime
+        End of the search period.
+
+    Returns
+    -------
+    list of str
+        CALIOP granule identifiers sorted chronologically.
+    """
+
+    files = []
+
+    # Search all directories between start_date and end_date.
+    current_date = start_date
+
+    while current_date.date() <= end_date.date():
+
+        folder = get_caliop_folder(
+            cfg,
+            current_date,
+        )
+
+        if folder.exists():
+
+            files.extend(
+                folder.glob("CAL_LID_L1-*.hdf")
+            )
+
+        current_date += timedelta(days=1)
+
+
+    # Sort files according to their observation time
+    files = sorted(
+        set(files),
+        key=extract_granule_time,
+    )
+
+
+    # Keep only granules inside the requested period
+    granule_files = [
+        file
+        for file in files
+        if start_date <= extract_granule_time(file) <= end_date
+    ]
+
+
+    return [
+        extract_granule_time(file).strftime("%Y-%m-%dT%H-%M-%SZN")
+        for file in granule_files
+    ]
+
+
 def find_neighbor_granules(cfg, current_file):
     """
     Find previous and next CALIOP granules.

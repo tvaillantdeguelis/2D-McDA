@@ -3,11 +3,9 @@
 
 from datetime import datetime
 import numpy as np
-import sys
 
-from my_modules.standard_outputs import print_elapsed_time
-from my_modules.readers.calipso_reader import range_from_altitude, rms_from_P_domain_to_betap_domain
-from my_modules.calipso_constants import *
+from .io.calipso_reader import range_from_altitude, rms_from_P_domain_to_betap_domain
+from .calipso_constants import *
 
 from config import SurfaceDetectionParameters
 

@@ -2,7 +2,7 @@ include: default.yaml
 
 period:
   start_date: "2010-01-01"
-  end_date: "2010-01-31"
+  end_date: "2010-01-02"
 
 slurm:
   max_parallel_jobs: 75

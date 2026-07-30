@@ -8,5 +8,4 @@
 CONFIG_FILE="$1"
 
 
-python scripts/process_granule.py \
-    --config "${CONFIG_FILE}"
+python scripts/process_granule.py "${CONFIG_FILE}"
