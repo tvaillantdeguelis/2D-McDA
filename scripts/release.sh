@@ -63,12 +63,6 @@ git commit -m "Prepare release ${VERSION}" -- "${VERSION_FILE}"
 git switch main
 git merge --no-ff develop -m "Merge develop into main for ${TAG} release"
 
-echo
-echo "Release merge created on main. Run the project checks now."
-read -r -p "Create annotated tag ${TAG}? [y/N] " CONFIRMATION
-[[ ${CONFIRMATION} =~ ^[Yy]$ ]] \
-    || fail "tag creation cancelled; main contains the release merge but no tag was created."
-
 git tag -a "${TAG}" -m "Release ${VERSION}"
 git switch develop
 git merge --ff-only main
