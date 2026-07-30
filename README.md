@@ -19,10 +19,16 @@ source ~/venvs/twod-mcda/bin/activate
 
 python -m pip install -e .
 
+## Configuration
 
+The repository stores example configuration files under `config/*.yaml.example`.
+Copy the examples locally before running the pipeline:
 
-
-
+```bash
+cp config/default.yaml.example config/default.yaml
+cp config/period.yaml.example config/period.yaml
+cp config/single_granule.yaml.example config/single_granule.yaml
+```
 
 ## Launch
 

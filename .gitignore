@@ -34,3 +34,7 @@ runs/*
 *.temp
 *.swp
 *~
+
+# Local copies of example configs
+config/*.yaml
+!config/*.yaml.example

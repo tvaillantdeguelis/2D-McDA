@@ -1,5 +1,5 @@
 cal_lid_l1:
-  folder: "/DATA/LIENS/CALIOP"
+  folder: "/home/ticjo/Documents/Pro/Recherche/codes/DATA/CALIOP"
   version: "5.00"
   type: "Standard"
   path_format: "CAL_LID_L1.v{version}/{year}/{year}_{month:02d}_{day:02d}"
