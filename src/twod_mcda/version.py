@@ -1,6 +1,11 @@
+from pathlib import Path
 import subprocess
 
 from . import __version__
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 def git_version():
     """
@@ -22,13 +27,14 @@ def git_version():
         # Call Git to obtain a human-readable description of the current commit
         git_desc = subprocess.check_output(
             ["git", "describe", "--tags", "--dirty", "--always"],
-            stderr=subprocess.DEVNULL
+            cwd=PROJECT_ROOT,
+            stderr=subprocess.DEVNULL,
         )
 
         # Convert bytes to string and remove trailing newline
         return git_desc.decode().strip()
 
-    except Exception:
+    except (OSError, subprocess.CalledProcessError):
         # Git is not available or the code is not in a Git repository
         return None
 
