@@ -1,23 +1,63 @@
 ## Installation
 
-Create the Conda environment:
+### Install Conda
 
-conda env create -n twod-mcda -f environment.yml
+This project uses Conda to provide Python and the compiled scientific
+dependencies required by the processing pipeline. If Conda is not already
+available on your system, install
+[Miniconda](https://docs.conda.io/projects/conda/en/stable/user-guide/install/)
+for your operating system, then open a new terminal.
 
-Activate it:
+Verify the installation with:
 
+```bash
+conda --version
+```
+
+### Create the Python environment
+
+Clone the repository and enter its directory:
+
+```bash
+git clone https://github.com/tvaillantdeguelis/2D-McDA.git
+cd 2D-McDA
+```
+
+Create the `twod-mcda` environment from `environment.yml`:
+
+```bash
+conda env create --name twod-mcda --file environment.yml
+```
+
+Activate it and install 2D-McDA in editable mode:
+
+```bash
 conda activate twod-mcda
-
-
-
-
-module load python
-
-python -m venv ~/venvs/twod-mcda
-
-source ~/venvs/twod-mcda/bin/activate
-
 python -m pip install -e .
+```
+
+The editable installation makes the `twod_mcda` package available while using
+the source files from the cloned repository. Verify the installation with:
+
+```bash
+python -c "import twod_mcda; print(twod_mcda.__version__)"
+```
+
+The environment must be activated again in each new terminal before running
+the program:
+
+```bash
+conda activate twod-mcda
+```
+
+### Update an existing environment
+
+After pulling a change to `environment.yml`, update the local environment and
+remove dependencies that are no longer declared with:
+
+```bash
+conda env update --name twod-mcda --file environment.yml --prune
+```
 
 ## Configuration
 
