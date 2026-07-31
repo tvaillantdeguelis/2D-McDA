@@ -10,7 +10,7 @@ import yaml
 
 def load_config(filename):
     """
-    Load a YAML configuration file and merge it with its default configuration.
+    Load a YAML configuration file and merge it with its common configuration.
 
     Parameters
     ----------
@@ -34,16 +34,16 @@ def load_config(filename):
     if "include" not in config:
         return config
 
-    # Read the default configuration file referenced by the "include" key.
-    # The default file contains common parameters shared by all runs.
+    # Read the common configuration file referenced by the "include" key.
+    # The included file contains common parameters shared by all runs.
     include_file = filename.parent / config["include"]
 
     with open(include_file) as f:
         base_config = yaml.safe_load(f)
 
-    # Update the default configuration with values from the current run.
-    # Parameters defined in the run configuration overwrite default values.
-    # The "include" entry is only used to locate the default file and is not
+    # Update the common configuration with values from the current run.
+    # Parameters defined in the run configuration overwrite common values.
+    # The "include" entry is only used to locate the common file and is not
     # kept in the final configuration dictionary.
     base_config.update(
         {

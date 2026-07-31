@@ -37,4 +37,4 @@ runs/*
 
 # Local copies of example configs
 config/*.yaml
-!config/*.yaml.example
+!config/*.example.yaml

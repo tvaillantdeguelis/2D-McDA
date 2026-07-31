@@ -1,0 +1,8 @@
+include: common.yaml
+
+granule: "2010-01-18T00-19-57ZN"
+
+subset:
+  mode: "profindex"           # "profindex" or "longitude"
+  start: 4000
+  end: 5000
