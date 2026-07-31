@@ -1,0 +1,15 @@
+cal_lid_l1:
+  root_directory: "/home/ticjo/Documents/Pro/Recherche/codes/DATA/CALIOP"
+  version: "5.00"
+  product_type: "Standard"
+  path_format: "CAL_LID_L1.v{version}/{year}/{year}_{month:02d}_{day:02d}"
+
+processing:
+  save_development_data: false
+  max_altitude_km: 30
+
+output:
+  root_directory: "/home/ticjo/Documents/Pro/Recherche/codes/projects/2D-McDA/data/output"
+  product_type: "Dev"
+  path_format: "2D_McDA.v{version}/{year}/{year}_{month:02d}_{day:02d}"
+  filetype: "HDF"
