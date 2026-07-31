@@ -3,7 +3,7 @@ import sys
 
 import numpy as np
 
-from legacy.calipso_reader import CALIOPRegularGridReader, split_granule_date
+from legacy.calipso_reader import CALIOPRegularGridReader
 from twod_mcda.calipso_constants import FILL_VALUE_FLOAT
 from twod_mcda.config import NB_PROF_EDGE, NB_PROF_OVERLAP, NB_PROF_SLICE
 from twod_mcda.detection.detect_features import detect_features
@@ -624,12 +624,8 @@ if __name__ == '__main__':
                     data_dict_2d_mcda_dev["Attenuated_Scattering_Ratio_1064_steps"], FILL_VALUE_FLOAT)
         params['atsr_1064_steps'].dim_labels = ['Step_1064', 'Profile_ID', 'Altitude']
     
-    # Create folder to store output data
-    granule_date_dict = split_granule_date(GRANULE_DATE)
-    outdata_folder = os.path.join(OUT_FOLDER, f"2D_McDA.{VERSION_2D_McDA.replace('V', 'v')}",
-                                  str(granule_date_dict['year']), f"{granule_date_dict['year']}_"
-                                                                  f"{granule_date_dict['month']:02d}_"
-                                                                  f"{granule_date_dict['day']:02d}")
+    # Create the configured output folder.
+    outdata_folder = OUT_FOLDER
     os.makedirs(outdata_folder, exist_ok=True)
     
     # Write in HDF file

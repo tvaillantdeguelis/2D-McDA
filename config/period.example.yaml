@@ -1,4 +1,4 @@
-include: default.yaml
+include: common.yaml
 
 period:
   start_date: "2010-01-01"

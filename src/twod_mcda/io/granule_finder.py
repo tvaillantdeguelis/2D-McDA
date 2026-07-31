@@ -59,7 +59,7 @@ def get_caliop_folder(cfg, date):
 
     cal_cfg = cfg["cal_lid_l1"]
 
-    folder = Path(cal_cfg["folder"])
+    root_directory = Path(cal_cfg["root_directory"])
 
     relative_path = cal_cfg["path_format"].format(
         version=cal_cfg["version"],
@@ -68,7 +68,7 @@ def get_caliop_folder(cfg, date):
         day=date.day,
     )
 
-    return folder / relative_path
+    return root_directory / relative_path
 
 
 def find_granule_file(cfg, granule_time):
