@@ -53,7 +53,7 @@ DEVELOP_COMMIT=$(git rev-parse develop)
 git remote get-url origin >/dev/null 2>&1 \
     || fail "remote origin is not configured."
 
-echo "Publishing main, develop, and ${TAG} to origin atomically."
-git push --atomic origin main develop "refs/tags/${TAG}"
+echo "Publishing main and ${TAG} to origin atomically."
+git push --atomic origin main "refs/tags/${TAG}"
 
 echo "Release ${VERSION} published."
