@@ -14,7 +14,7 @@ The pipeline expects CALIOP Level 1 HDF files named according to the official CA
 CAL_LID_L1-Standard-V5-00.2010-01-18T00-19-57ZN.hdf
 ```
 
-Files must be organized below a common data directory. With the default path format, the example above is expected at:
+Files must be stored below the directory configured by `cal_lid_l1.root_directory`, using the structure defined by `cal_lid_l1.path_format` (see [Common settings](#31-common-settings-configcommonyaml)). With the example configuration, the file above is expected at:
 
 ```text
 <CALIOP_ROOT>/CAL_LID_L1.v5.00/2010/2010_01_18/
@@ -94,8 +94,7 @@ cp config/single_granule.example.yaml config/single_granule.yaml
 
 ### 3.1 Common settings: `config/common.yaml`
 
-This file defines the CALIOP data location, processing options, and output
-directory shared by single-granule and period runs:
+This file defines the CALIOP data location, processing options, and output directory shared by single-granule and period runs:
 
 ```yaml
 cal_lid_l1:
