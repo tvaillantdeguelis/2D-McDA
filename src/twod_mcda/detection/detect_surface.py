@@ -179,7 +179,7 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
 
     ###########################################################
     #### Test if DEM estimated surface altitude is correct ####
-    print("\t=> Test if DEM estimated surface altitude is correct...", end='')
+    print("\t=> Test if DEM estimated surface altitude is correct...")
     for i in np.arange(est_surf_alt.size):
         if (est_surf_alt[i] < np.min(alt)) | (est_surf_alt[i] > np.max(alt)):
             raise Exception(f"DEM surface_elevation[{i}] = {est_surf_alt[i]:.3f} looks uncorrect")
@@ -187,46 +187,46 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
 
     ################################################
     #### Compute RMS in beta' domain at surface ####
-    print("\t=> Compute RMS in beta' domain at surface...", end='')
+    print("\t=> Compute RMS in beta' domain at surface...")
     r_surf = range_from_altitude(alt_sat, est_surf_alt, caliop_lidar_tilt)
     rms_betap_surf = rms_from_P_domain_to_betap_domain(rms, r_surf, energy, gain, calib, pgr)
     
 
     #########################################################
     #### Compute bin index of estimated surface altitude ####
-    print("\t=> Compute bin index of estimated surface altitude...", end='')
+    print("\t=> Compute bin index of estimated surface altitude...")
     est_surf_alt_index = np.argmin(np.abs(alt - est_surf_alt[:, np.newaxis]), axis=1)
 
 
     ######################################
     #### Define surface search region ####
-    print("\t=> Define surface search region...", end='')
+    print("\t=> Define surface search region...")
     min_index_search_region, max_index_search_region =\
         surf_search_region(surf_type, est_surf_alt, est_surf_alt_index, alt, params)
 
 
     #############################
     #### Compute derivatives ####
-    print("\t=> Compute derivatives...", end='')
+    print("\t=> Compute derivatives...")
     deriv = compute_deriv(ab, alt)
 
 
     ##########################################
     #### Get min and max in search region ####
-    print("\t=> Get min and max in search region...", end='')
+    print("\t=> Get min and max in search region...")
     i_min, i_max, alt_min, alt_max = get_min_max_deriv(deriv, alt, min_index_search_region,
                                                        max_index_search_region)
 
 
     ######################################
     #### Get maximum signal magnitude ####
-    print("\t=> Get maximum signal magnitude...", end='')
+    print("\t=> Get maximum signal magnitude...")
     ab_max, ab_argmax = get_max_ab_signal(ab, i_min, i_max)
 
 
     ###########################
     #### Surface detection ####
-    print("\t=> Surface detection...", end='')
+    print("\t=> Surface detection...")
     i_surf, alt_surf = apply_surf_detection_rules(i_min, i_max, alt_min, alt_max, ab_max,
                                                   ab_argmax, params, rms_betap_surf, ab, deriv,
                                                   alt, channel)
@@ -234,7 +234,7 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
     
     ################################
     #### Remove false positives ####
-    print("\t=> Remove false positives...", end='')
+    print("\t=> Remove false positives...")
     i_surf, alt_surf = remove_false_pos(i_surf, alt_surf, params, est_surf_alt_index)
 
 
