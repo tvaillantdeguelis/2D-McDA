@@ -1,8 +1,8 @@
 include: common.yaml
 
-granule: "2010-01-18T00-19-57ZN"
+granule: "2018-08-31T21-33-53ZN"
 
 subset:
-  mode: "profindex"           # "profindex" or "longitude"
-  start: 4000
-  end: 5000
+  mode: "longitude"           # "profindex" or "longitude"
+  start: 63.2
+  end: 61.3

@@ -738,7 +738,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     ############################################
     #### Put 'Surface' flag on feature mask ####
-    print("\t=> Put 'Surface' flag on feature mask...", end='')
+    print("\t=> Put 'Surface' flag on feature mask...")
     step += 1 
     feature_dict[step] = apply_surface_detection(feature_dict[last_feature], surf_alt_index)
     last_feature = step
@@ -746,7 +746,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     #########################################
     #### Remove detected pixel from ATSR ####
-    print("\t=> Remove detected pixel from ATSR...", end='')
+    print("\t=> Remove detected pixel from ATSR...")
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
@@ -765,7 +765,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
         #####################################################################
         #### Apply threshold to get very high echo (likely PMT artifact) ####
-        print("\t\t- Apply threshold to get very high echo (likely PMT artifact)...", end='')
+        print("\t\t- Apply threshold to get very high echo (likely PMT artifact)...")
         step += 1
         feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr],
                                              sr_sigma)
@@ -774,7 +774,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
         #######################################
         #### Replace 'maybe' by 'detected' ####
         print("\t\t- Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number "
-              "limit condition...", end='')
+              "limit condition...")
         step += 1
         feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
         last_feature = step
@@ -782,7 +782,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
         ################################
         #### Flag 'Likely artifact' ####
-        print("\t\t- Flag 'Likely Artifact' below those high signal to some extent...", end='')
+        print("\t\t- Flag 'Likely Artifact' below those high signal to some extent...")
         step += 1
         feature_dict[step] = fill_likely_artifact(params, feature_dict[last_feature],
                                                   FLAG_DETECTION_LEVEL)
@@ -807,7 +807,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     ###################################################
     #### Apply threshold to get the 'maybe' pixels ####
-    print("\t\t- Apply threshold...", end='')
+    print("\t\t- Apply threshold...")
     step += 1
     feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma)
     last_feature = step
@@ -816,7 +816,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     #######################################
     #### Replace 'maybe' by 'detected' ####
     print("\t\t- Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels "\
-          "meet neighbors number limit condition...", end='')
+          "meet neighbors number limit condition...")
     step += 1
     feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
@@ -837,7 +837,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     ###################################################
     #### Apply threshold to get the 'maybe' pixels ####
-    print("\t\t- Apply threshold...", end='')
+    print("\t\t- Apply threshold...")
     step += 1
     feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma)
     last_feature = step
@@ -845,7 +845,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     #########################################
     #### Windowing on the 'maybe' pixels ####
-    print("\t\t- Windowing on the 'maybe' pixels...", end='')
+    print("\t\t- Windowing on the 'maybe' pixels...")
     step += 1
     feature_dict[step] = apply_window(s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
@@ -854,7 +854,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     #######################################
     #### Replace 'maybe' by 'detected' ####
     print("\t\t- Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels "\
-          "meet neighbors number limit condition...", end='')
+          "meet neighbors number limit condition...")
     step += 1
     feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
@@ -875,7 +875,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     ###################################################
     #### Apply threshold to get the 'maybe' pixels ####
-    print("\t\t- Apply threshold...", end='')
+    print("\t\t- Apply threshold...")
     step += 1
     feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma)
     last_feature = step
@@ -883,7 +883,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     #########################################
     #### Windowing on the 'maybe' pixels ####
-    print("\t\t- Windowing on the 'maybe' pixels...", end='')
+    print("\t\t- Windowing on the 'maybe' pixels...")
     step += 1
     feature_dict[step] = apply_window(s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
@@ -892,7 +892,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     #######################################
     #### Replace 'maybe' by 'detected' ####
     print("\t\t- Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels "\
-          "meet neighbors number limit condition...", end='')
+          "meet neighbors number limit condition...")
     step += 1
     feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
@@ -903,7 +903,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     #####################################################################
     #### Fill fully attenuated from lowest altitude to first feature ####
     print("\t=> Flag 'Fully Attenuated' from lowest altitude to first "\
-          "feature...", end='')
+          "feature...")
     step += 1
     feature_dict[step] = fill_fully_attenuated(feature_dict[last_feature])
     last_feature = step
@@ -912,7 +912,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     #########################################
     #### Remove detected pixel from ATSR ####
-    print("\t=> Remove detected pixel from ATSR...", end='')
+    print("\t=> Remove detected pixel from ATSR...")
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
@@ -921,7 +921,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     ##############################
     #### Average below 8.2 km ####
     print("\t=> Average below 8.2 km as between 8.2 km and 20.2 km "\
-          "(60 m × 1 km)...", end='')
+          "(60 m × 1 km)...")
     step += 1
     # Note: sr_sigma needs to be modified below 8.2 km
     sr_dict[step], sr_sigma = average_below_8_2(sr_dict[last_sr], sr_sigma)
@@ -930,7 +930,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     ########################################################
     #### Flag almost FA where lidar signal is very weak ####
-    print("\t=> Flag 'almost FA' where lidar signal is very weak...", end='')
+    print("\t=> Flag 'almost FA' where lidar signal is very weak...")
     step += 1
     feature_dict[step] = FLAG_WEAK_SIGNAL(params, feature_dict[last_feature], sr_dict[last_sr],
                                           sr_sigma)
@@ -939,7 +939,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     #########################################
     #### Remove detected pixel from ATSR ####
-    print("\t=> Remove detected pixel from ATSR...", end='')
+    print("\t=> Remove detected pixel from ATSR...")
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
@@ -948,7 +948,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     ############################################################
     #### Correct sr signal below feature from transmittance ####
     print("\t=> Correct sr signal below feature from transmittance using "\
-        f"fixed lidar ratio above and below {params.temp_ice_liquid} °C...", end='')
+        f"fixed lidar ratio above and below {params.temp_ice_liquid} °C...")
     step += 1
     sr_dict[step], twoway_transmittance_array[:, :] =\
         transmission_correction(sr_dict[last_sr], sr, b_mol, feature_dict[last_feature],
@@ -969,7 +969,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     #########################################
     #### Remove detected pixel from ATSR ####
-    print("\t=> Remove detected pixel from ATSR...", end='')
+    print("\t=> Remove detected pixel from ATSR...")
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
@@ -988,7 +988,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     ###########################################################
     #### Apply a gaussian horizontal line window averaging ####
-    print("\t\t- Apply a gaussian horizontal line window averaging...", end='')
+    print("\t\t- Apply a gaussian horizontal line window averaging...")
     step += 1
     # sr_dict[step], sr_sigma = gaussian_line_window(a[0], a[1], sr_dict[last_sr],
     #                                                feature_dict[last_feature], sr_sigma)
@@ -999,7 +999,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     ###################################################
     #### Apply threshold to get the 'maybe' pixels ####
-    print("\t\t- Apply threshold...", end='')
+    print("\t\t- Apply threshold...")
     step += 1
     feature_dict[step] = apply_threshold(k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma)
     last_feature = step
@@ -1007,7 +1007,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     #########################################
     #### Windowing on the 'maybe' pixels ####
-    print("\t\t- Windowing on the 'maybe' pixels...", end='')
+    print("\t\t- Windowing on the 'maybe' pixels...")
     step += 1
     feature_dict[step] = apply_window(s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
@@ -1017,7 +1017,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     #######################################
     #### Replace 'maybe' by 'detected' ####
     print("\t\t- Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels "\
-          "meet neighbors number limit condition...", end='')
+          "meet neighbors number limit condition...")
     step += 1
     feature_dict[step] = replace_maybe(n, feature_dict[last_feature], FLAG_DETECTION_LEVEL)
     last_feature = step
@@ -1028,7 +1028,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     ##########################################################################
     #### Reput all not confident flags where overwritten during averaging ####
     print("\t=> Reput all not confident flags where overwritten during "\
-          "averaging...", end='')
+          "averaging...")
     step += 1
     feature_dict[step] = reput_low_confidence_flags(feature_dict[last_feature],
                                                     feature_dict[last_feature_before_averaging])
@@ -1038,14 +1038,14 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     #########################################
     #### Remove detected pixel from ATSR ####
-    print("\t=> Remove detected pixel from ATSR...", end='')
+    print("\t=> Remove detected pixel from ATSR...")
     step += 1
     sr_dict[step] = remove_detect_from_sr(sr_dict[last_sr], feature_dict[last_feature])
     last_sr = step
 
     ############################################################
     #### Transform feature and sr dictionaries to 3D arrays ####
-    print("\t=> Transform feature and sr dictionaries to 3D arrays...", end='')
+    print("\t=> Transform feature and sr dictionaries to 3D arrays...")
     # Initialization
     feature_array_steps = np.ma.zeros((step+1, sr.shape[0], sr.shape[1]), dtype=np.uint8)
     sr_array_steps = np.ma.ones((step+1, sr.shape[0], sr.shape[1]))*FILL_VALUE_FLOAT
