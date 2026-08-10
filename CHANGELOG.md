@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.1.10] - 2026-08-10
+
+### Changed
+
+- Modified README.
+
 ## [1.1.9] - 2026-08-10
 
 ### Changed
@@ -116,6 +122,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[1.1.10]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v1.1.9...v1.1.10
 [1.1.9]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v1.1.6...v1.1.7
