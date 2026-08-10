@@ -1,34 +1,26 @@
 # 2D-McDA
 
-Two-dimensional and multi-channel detection algorithm for the CALIPSO/CALIOP
-lidar measurements.
+Two-dimensional and multi-channel detection algorithm for the CALIPSO/CALIOP lidar measurements.
 
-2D-McDA processes CALIOP Level 1 attenuated-backscatter profiles and produces
-two-dimensional feature-detection masks from the 532 nm parallel,
-532 nm perpendicular, and 1064 nm channels.
+2D-McDA processes CALIOP Level 1 attenuated-backscatter profiles and produces two-dimensional feature-detection masks from the 532 nm parallel, 532 nm perpendicular, and 1064 nm channels.
 
 ## 1. Input and output data
 
 ### 1.1 Input
 
-The pipeline expects CALIOP Level 1 HDF files named according to the official
-CALIOP convention, for example:
+The pipeline expects CALIOP Level 1 HDF files named according to the official CALIOP convention, for example:
 
 ```text
 CAL_LID_L1-Standard-V5-00.2010-01-18T00-19-57ZN.hdf
 ```
 
-Files must be organized below a common data directory. With the default path
-format, the example above is expected at:
+Files must be organized below a common data directory. With the default path format, the example above is expected at:
 
 ```text
 <CALIOP_ROOT>/CAL_LID_L1.v5.00/2010/2010_01_18/
 ```
 
-For each requested granule, the pipeline also looks for the preceding and
-following granules. They provide the neighboring profiles required to process
-the edges of the current granule continuously. The search includes the
-previous and next calendar days to handle granules close to midnight.
+For each requested granule, the pipeline also looks for the preceding and following granules. They provide the neighboring profiles required to process the edges of the current granule continuously. The search includes the previous and next calendar days to handle granules close to midnight.
 
 ### 1.2 Output
 
@@ -40,12 +32,9 @@ The current pipeline writes one HDF4 file containing:
 - detection flags for the 1064 nm channel;
 - a composite detection mask combining the three channels.
 
-When `processing.save_development_data` is enabled, the file also contains
-intermediate detection masks, attenuated scattering ratios, and cumulative
-two-way transmittances.
+When `processing.save_development_data` is enabled, the file also contains intermediate detection masks, attenuated scattering ratios, and cumulative two-way transmittances.
 
-Outputs are written below `output.root_directory` using the structure defined
-by `output.path_format`. With the example configuration, this gives:
+Outputs are written below `output.root_directory` using the structure defined by `output.path_format`. With the example configuration, this gives:
 
 ```text
 <OUTPUT_ROOT>/2D_McDA.<version>/<year>/<year>_<month>_<day>/
@@ -171,14 +160,10 @@ slurm:
   max_parallel_jobs: 75
 ```
 
-- `period.start_date` and `period.end_date` delimit the days to search, using
-  the `YYYY-MM-DD` format.
-- `slurm.max_parallel_jobs` limits the number of this user's pending and
-  running Slurm jobs. Submission waits when the limit is reached.
+- `period.start_date` and `period.end_date` delimit the days to search, using the `YYYY-MM-DD` format.
+- `slurm.max_parallel_jobs` limits the number of this user's pending and running Slurm jobs. Submission waits when the limit is reached.
 
-The period launcher creates one complete run configuration per discovered
-granule under `runs/<year>/<year-month>/`, then submits one Slurm job for each
-granule.
+The period launcher creates one complete run configuration per discovered granule under `runs/<year>/<year-month>/`, then submits one Slurm job for each granule.
 
 ## 4. Running the pipeline
 
