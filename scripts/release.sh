@@ -23,6 +23,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_ROOT=$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null) \
     || fail "the script is not inside a Git repository."
 VERSION_FILE="src/twod_mcda/__init__.py"
+CHANGELOG_FILE="CHANGELOG.md"
 
 cd "${PROJECT_ROOT}"
 
@@ -51,15 +52,18 @@ CODE_VERSION=$(python -c \
 git diff --quiet HEAD -- "${VERSION_FILE}" \
     && fail "${VERSION_FILE} has not been changed for release ${VERSION}."
 
-OTHER_TRACKED_CHANGES=$(git diff --name-only HEAD -- . | grep -Fxv "${VERSION_FILE}" || true)
+OTHER_TRACKED_CHANGES=$(git diff --name-only HEAD -- . \
+    | grep -Fxv "${VERSION_FILE}" \
+    | grep -Fxv "${CHANGELOG_FILE}" \
+    || true)
 [[ -z ${OTHER_TRACKED_CHANGES} ]] \
-    || fail "tracked files other than ${VERSION_FILE} have uncommitted changes: ${OTHER_TRACKED_CHANGES//$'\n'/, }."
+    || fail "tracked files other than ${VERSION_FILE} and ${CHANGELOG_FILE} have uncommitted changes: ${OTHER_TRACKED_CHANGES//$'\n'/, }."
 
 UNTRACKED_FILES=$(git ls-files --others --exclude-standard)
 [[ -z ${UNTRACKED_FILES} ]] \
     || fail "untracked files are present: ${UNTRACKED_FILES//$'\n'/, }."
 
-git commit -m "Prepare release ${VERSION}" -- "${VERSION_FILE}"
+git commit -m "Prepare release ${VERSION}" -- "${VERSION_FILE}" "${CHANGELOG_FILE}"
 git switch main
 git merge --no-ff develop -m "Merge develop into main for ${TAG} release"
 
