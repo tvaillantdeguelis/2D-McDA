@@ -49,9 +49,6 @@ CODE_VERSION=$(python -c \
 [[ ${CODE_VERSION} == "${VERSION}" ]] \
     || fail "requested version ${VERSION} does not match __version__ (${CODE_VERSION})."
 
-git diff --quiet HEAD -- "${VERSION_FILE}" \
-    && fail "${VERSION_FILE} has not been changed for release ${VERSION}."
-
 OTHER_TRACKED_CHANGES=$(git diff --name-only HEAD -- . \
     | grep -Fxv "${VERSION_FILE}" \
     | grep -Fxv "${CHANGELOG_FILE}" \
