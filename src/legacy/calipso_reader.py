@@ -1,16 +1,15 @@
 import sys
 import os
 
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
 
-from twod_mcda.io.hdf_reader import HDF4Reader
-from twod_mcda.paths import CALIOP_DATA_HEAD_PATH, CALIOP_DATA_TAIL_PATH_FMT, \
+from legacy.io.hdf_reader import HDF4Reader
+from legacy.paths import CALIOP_DATA_HEAD_PATH, CALIOP_DATA_TAIL_PATH_FMT, \
     IIR_DATA_HEAD_PATH, IIR_DATA_TAIL_PATH_FMT, get_caliop_data_tail_path
-from twod_mcda.calipso_constants import *
-from twod_mcda.geotools import get_prof_min_max_indexes_from_lon
-from twod_mcda.calipso_calculator import compute_par_ab532, compute_ab_mol_and_b_mol, \
+from legacy.calipso_constants import *
+from legacy.geotools import get_prof_min_max_indexes_from_lon
+from legacy.calipso_calculator import compute_par_ab532, compute_ab_mol_and_b_mol, \
     nsf_from_V_domain_to_betap_domain, rms_from_P_domain_to_betap_domain, compute_shotnoise, \
     compute_backgroundnoise, make_molecular_model
 

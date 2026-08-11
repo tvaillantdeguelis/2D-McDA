@@ -4,13 +4,7 @@ import numpy as np
 import xarray as xr
 
 from twod_mcda.io.hdf_reader import HDF4Reader
-
-
-CALIOP_L1_VARIABLE_DIMS = {
-    "Latitude": ("profile",),
-    "Longitude": ("profile",),
-    "Lidar_Data_Altitudes": ("lidar_altitude",),
-}
+from twod_mcda.io.caliop_l1_variables import CALIOP_L1_VARIABLE_DIMS
 
 
 def read_caliop_l1(
