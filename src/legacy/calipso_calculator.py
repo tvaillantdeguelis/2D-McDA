@@ -254,13 +254,6 @@ def rms_from_P_domain_to_betap_domain(rms, r_alt, laser_energy, gain, calib, pgr
     return rms*r_alt**2/(laser_energy*gain*calib*pgr)
 
 
-def range_from_altitude(spacecraft_alt, data_alt, caliop_lidar_tilt):
-    """Return the range between the spacecraft and a lidar altitude bin."""
-    return (spacecraft_alt - data_alt) / np.cos(
-        caliop_lidar_tilt * np.pi / 180.0
-    )
-
-
 def compute_shotnoise(fcorr, nb_bins_shift_abs, nb_pixels, nsf, mol_ab):
     return fcorr[:, nb_bins_shift_abs].T * 1/np.sqrt(nb_pixels) * nsf * 1/np.sqrt(mol_ab)
 

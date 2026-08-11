@@ -162,6 +162,43 @@ class LegacyPipelineTests(unittest.TestCase):
             "2010-01-01T00-22-28ZN",
         )
 
+    @patch("twod_mcda.processing.granule_processor.process_granule_refactored")
+    @patch("twod_mcda.pipeline.get_full_version", return_value="v2.0.0")
+    @patch(
+        "twod_mcda.pipeline.find_neighbor_granules",
+        return_value=(PREVIOUS, NEXT),
+    )
+    @patch("twod_mcda.pipeline.find_granule_file", return_value=CURRENT)
+    def test_process_granule_invokes_refactored_implementation(
+        self,
+        find_granule_file,
+        find_neighbor_granules,
+        get_full_version,
+        process_refactored,
+    ):
+        with patch(
+            "twod_mcda.pipeline.PROCESSING_IMPLEMENTATION",
+            "refactored",
+        ):
+            process_granule(config())
+
+        process_refactored.assert_called_once()
+        processing_config = process_refactored.call_args.args[0]
+        self.assertEqual(
+            processing_config["granule_date"],
+            "2010-01-01T00-22-28ZN",
+        )
+
+    @patch("twod_mcda.pipeline.PROCESSING_IMPLEMENTATION", "invalid")
+    def test_unknown_processing_implementation_is_rejected(self):
+        from twod_mcda.pipeline import _run_processing
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Unknown PROCESSING_IMPLEMENTATION",
+        ):
+            _run_processing({})
+
 
 if __name__ == "__main__":
     unittest.main()

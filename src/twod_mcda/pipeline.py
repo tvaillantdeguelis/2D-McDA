@@ -1,9 +1,4 @@
-"""Top-level processing pipeline.
-
-This module currently acts as a compatibility bridge to the complete legacy
-algorithm.  Its deliberately small surface makes it possible to replace the
-legacy stages one at a time during the refactoring.
-"""
+"""Top-level processing pipeline and implementation selector."""
 
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +8,13 @@ import time
 
 from .io.granule_finder import find_granule_file, find_neighbor_granules
 from .version import get_full_version
+
+
+# Change this value to ``"refactored"`` to run the new orchestration.
+# The legacy implementation remains the default until output parity has been
+# checked on representative CALIOP granules.
+PROCESSING_IMPLEMENTATION = "legacy"
+_PROCESSING_IMPLEMENTATIONS = {"legacy", "refactored"}
 
 
 _GRANULE_ID_PATTERN = re.compile(
@@ -157,8 +159,32 @@ def _legacy_config(cfg, current_file, previous_file, next_file):
     }
 
 
+def _run_processing(config):
+    """Dispatch processing to the selected implementation."""
+
+    if PROCESSING_IMPLEMENTATION == "legacy":
+        runpy.run_module(
+            "legacy.process_granule_old",
+            init_globals={"LEGACY_CONFIG": config},
+            run_name="__main__",
+        )
+        return
+
+    if PROCESSING_IMPLEMENTATION == "refactored":
+        from .processing.granule_processor import process_granule_refactored
+
+        process_granule_refactored(config)
+        return
+
+    choices = ", ".join(sorted(_PROCESSING_IMPLEMENTATIONS))
+    raise ValueError(
+        f"Unknown PROCESSING_IMPLEMENTATION: {PROCESSING_IMPLEMENTATION!r}. "
+        f"Expected one of: {choices}."
+    )
+
+
 def process_granule(cfg):
-    """Process one granule by invoking the complete legacy implementation."""
+    """Resolve granule paths and run the selected processing implementation."""
 
     _validate_config_schema(cfg)
     _validate_output_filetype(cfg["output"])
@@ -175,21 +201,20 @@ def process_granule(cfg):
     print(f"Current granule : {current_file}")
     print(f"Next granule    : {next_file}")
 
-    legacy_config = _legacy_config(
+    processing_config = _legacy_config(
         cfg,
         current_file,
         previous_file,
         next_file,
     )
 
-    print(f"2D-McDA version: {legacy_config['version_2d_mcda']}")
-    runpy.run_module(
-        "legacy.process_granule_old",
-        init_globals={"LEGACY_CONFIG": legacy_config},
-        run_name="__main__",
-    )
+    print(f"2D-McDA version: {processing_config['version_2d_mcda']}")
+    print(f"Processing implementation: {PROCESSING_IMPLEMENTATION}")
+    _run_processing(processing_config)
 
     end_time = datetime.now().astimezone()
     total_time = time.perf_counter() - start_tic
+    hours, remainder = divmod(total_time, 3600)
+    minutes, seconds = divmod(remainder, 60)
     print(f"End time: {end_time}")
-    print(f"Total runtime: {total_time:.1f} s")
+    print(f"Total runtime: {int(hours)} h {int(minutes)} min {seconds:.1f} s")

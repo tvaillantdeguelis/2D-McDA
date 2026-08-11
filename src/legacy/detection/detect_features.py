@@ -6,9 +6,9 @@ import numpy as np
 import sys
 from numba import jit
 
-from twod_mcda.calipso_constants import *
-from twod_mcda.config import *
-from twod_mcda.timing import timer
+from legacy.calipso_constants import *
+from legacy.config import *
+from legacy.timing import timer
 
 
 def feature_for_numba(feature):

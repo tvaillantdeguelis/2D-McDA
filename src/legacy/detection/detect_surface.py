@@ -3,13 +3,10 @@
 
 import numpy as np
 
-from twod_mcda.calipso_calculator import (
-    range_from_altitude,
-    rms_from_P_domain_to_betap_domain,
-)
-from twod_mcda.calipso_constants import *
-from twod_mcda.config import SurfaceDetectionParameters
-from twod_mcda.timing import timer
+from legacy.calipso_reader import range_from_altitude, rms_from_P_domain_to_betap_domain
+from legacy.calipso_constants import *
+from legacy.config import SurfaceDetectionParameters
+from legacy.timing import timer
 
 FILL_VALUE_INT = 999
 
