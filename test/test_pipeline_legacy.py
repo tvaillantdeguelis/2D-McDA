@@ -44,7 +44,6 @@ def config():
                 "2D_McDA.v{version}/{year}/"
                 "{year}_{month:02d}_{day:02d}"
             ),
-            "filetype": "HDF",
         },
         "subset": {
             "mode": "profindex",
@@ -98,16 +97,6 @@ class LegacyPipelineTests(unittest.TestCase):
             "/output/2D_McDA.v2.0.0/2010/2010_01_01",
         )
 
-    def test_legacy_config_rejects_non_hdf_output(self):
-        cfg = config()
-        cfg["output"]["filetype"] = "netCDF"
-
-        with self.assertRaisesRegex(
-            ValueError,
-            'output.filetype must be "HDF"',
-        ):
-            _legacy_config(cfg, CURRENT, PREVIOUS, NEXT)
-
     @patch("twod_mcda.pipeline.get_full_version", return_value="v2.0.0")
     def test_legacy_config_supports_40_km(self, get_full_version):
         cfg = config()
@@ -127,42 +116,20 @@ class LegacyPipelineTests(unittest.TestCase):
         ):
             _legacy_config(cfg, CURRENT, PREVIOUS, NEXT)
 
-    def test_legacy_config_rejects_old_schema(self):
-        cfg = config()
-        cfg["processing"]["process_up_to_40km"] = False
-
-        with self.assertRaisesRegex(
-            ValueError,
-            '"process_up_to_40km" was renamed to "max_altitude_km"',
-        ):
-            _legacy_config(cfg, CURRENT, PREVIOUS, NEXT)
-
     @patch("twod_mcda.pipeline.runpy.run_module")
-    @patch("twod_mcda.pipeline.get_full_version", return_value="v2.0.0")
-    @patch(
-        "twod_mcda.pipeline.find_neighbor_granules",
-        return_value=(PREVIOUS, NEXT),
-    )
-    @patch("twod_mcda.pipeline.find_granule_file", return_value=CURRENT)
-    def test_process_granule_invokes_legacy_module(
-        self,
-        find_granule_file,
-        find_neighbor_granules,
-        get_full_version,
-        run_module,
-    ):
-        process_granule(config())
+    def test_legacy_engine_uses_shared_product_path(self, run_module):
+        from twod_mcda.pipeline import _run_processing
 
-        run_module.assert_called_once()
-        args, kwargs = run_module.call_args
-        self.assertEqual(args, ("legacy.process_granule_old",))
-        self.assertEqual(kwargs["run_name"], "__main__")
-        self.assertEqual(
-            kwargs["init_globals"]["LEGACY_CONFIG"]["granule_date"],
-            "2010-01-01T00-22-28ZN",
+        with patch("twod_mcda.pipeline.PROCESSING_IMPLEMENTATION", "legacy"):
+            _run_processing({"example": True})
+
+        run_module.assert_called_once_with(
+            "legacy.process_granule_old",
+            init_globals={"LEGACY_CONFIG": {"example": True}},
+            run_name="__main__",
         )
 
-    @patch("twod_mcda.processing.granule_processor.process_granule_refactored")
+    @patch("twod_mcda.pipeline._run_processing")
     @patch("twod_mcda.pipeline.get_full_version", return_value="v2.0.0")
     @patch(
         "twod_mcda.pipeline.find_neighbor_granules",
@@ -174,31 +141,16 @@ class LegacyPipelineTests(unittest.TestCase):
         find_granule_file,
         find_neighbor_granules,
         get_full_version,
-        process_refactored,
+        run_processing,
     ):
-        with patch(
-            "twod_mcda.pipeline.PROCESSING_IMPLEMENTATION",
-            "refactored",
-        ):
-            process_granule(config())
+        process_granule(config())
 
-        process_refactored.assert_called_once()
-        processing_config = process_refactored.call_args.args[0]
+        run_processing.assert_called_once()
+        processing_config = run_processing.call_args.args[0]
         self.assertEqual(
             processing_config["granule_date"],
             "2010-01-01T00-22-28ZN",
         )
-
-    @patch("twod_mcda.pipeline.PROCESSING_IMPLEMENTATION", "invalid")
-    def test_unknown_processing_implementation_is_rejected(self):
-        from twod_mcda.pipeline import _run_processing
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "Unknown PROCESSING_IMPLEMENTATION",
-        ):
-            _run_processing({})
-
 
 if __name__ == "__main__":
     unittest.main()

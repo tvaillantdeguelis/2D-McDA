@@ -45,7 +45,8 @@ def load_config(filename):
     # Parameters defined in the run configuration overwrite common values.
     # The "include" entry is only used to locate the common file and is not
     # kept in the final configuration dictionary.
-    base_config.update(
+    merged_config = base_config.copy()
+    merged_config.update(
         {
             key: value
             for key, value in config.items()
@@ -53,4 +54,4 @@ def load_config(filename):
         }
     )
 
-    return base_config
+    return merged_config
