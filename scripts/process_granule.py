@@ -18,15 +18,20 @@ from twod_mcda.pipeline import process_granule
 def main():
     """Parse command-line arguments and process one CALIOP granule."""
 
+    # Create a command-line parser for this script.
+    # It handles arguments passed when running the script like:
+    # python process_granule.py /path/to/config.yaml
     parser = argparse.ArgumentParser(
         description="Process one CALIOP granule."
     )
 
+    # Declare a required positional argument named config_file.
     parser.add_argument(
         "config_file",
         help="Path to the YAML configuration file.",
     )
 
+    # Parse the command-line arguments provided by the user.
     args = parser.parse_args()
 
     cfg = load_config(args.config_file)

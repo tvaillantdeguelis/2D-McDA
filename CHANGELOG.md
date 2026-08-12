@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Replaced HDF4 product output with compressed netCDF-4 output and CF 1.13 metadata.
+
+### Removed
+
+- Removed the output format setting and the obsolete HDF4 writers.
+
 ## [1.1.10] - 2026-08-10
 
 ### Changed

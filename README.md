@@ -24,7 +24,7 @@ For each requested granule, the pipeline also looks for the preceding and follow
 
 ### 1.2 Output
 
-The current pipeline writes one HDF4 file containing:
+The current pipeline writes one netCDF-4 file (using HDF5 storage) containing:
 
 - profile identifiers, observation times, latitude, longitude, and altitude;
 - detection flags for the 532 nm parallel channel;
@@ -43,8 +43,12 @@ Outputs are written below `output.root_directory` using the structure defined by
 An output filename looks like:
 
 ```text
-CAL_LID_L2_2D_McDA-Dev-V1-1-0.2010-01-18T00-19-57ZN_lon_75.45_73.80.hdf
+CAL_LID_L2_2D_McDA-Dev-V1-1-0.2010-01-18T00-19-57ZN_lon_75.45_73.80.nc
 ```
+
+Output metadata follow CF 1.13. The CALIOP orbit is represented as a
+`trajectoryProfile` feature, with explicit time, latitude, longitude, and
+altitude coordinates. Arrays are compressed losslessly in the netCDF-4 file.
 
 
 ## 2. Installation
@@ -111,7 +115,6 @@ output:
   root_directory: "/path/to/2D-McDA-output"
   product_type: "Dev"
   path_format: "2D_McDA.v{version}/{year}/{year}_{month:02d}_{day:02d}"
-  filetype: "HDF"
 ```
 
 The fields have the following meanings:
@@ -120,12 +123,11 @@ The fields have the following meanings:
 - `cal_lid_l1.version`: input product version without the leading `V`.
 - `cal_lid_l1.product_type`: product type used in filenames, normally `Standard`.
 - `cal_lid_l1.path_format`: path below the root directory. The placeholders  `version`, `year`, `month`, and `day` are filled for each granule.
-- `processing.save_development_data`: include intermediate algorithm arrays in the output HDF file. This increases its size.
+- `processing.save_development_data`: include intermediate algorithm arrays in the output netCDF file. This increases its size.
 - `processing.max_altitude_km`: maximum processed altitude. The supported values are 30 and 40 km.
 - `output.root_directory`: root directory in which result directories are created.
 - `output.product_type`: label included in the output filename; it defaults to `Dev`.
 - `output.path_format`: path below the output root directory. The placeholders `version`, `year`, `month`, and `day` are filled for each granule.
-- `output.filetype`: output file type. The current pipeline supports only `HDF` and returns an error for any other value.
 
 ### 3.2 Single-granule settings: `config/single_granule.yaml`
 

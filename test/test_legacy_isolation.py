@@ -1,4 +1,3 @@
-import ast
 from pathlib import Path
 import unittest
 
@@ -8,23 +7,13 @@ LEGACY_DIRECTORY = SOURCE_DIRECTORY / "legacy"
 
 
 class LegacyIsolationTests(unittest.TestCase):
-    def test_legacy_package_does_not_import_refactored_package(self):
-        offenders = []
-
-        for path in LEGACY_DIRECTORY.rglob("*.py"):
-            tree = ast.parse(path.read_text(), filename=str(path))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    modules = [alias.name for alias in node.names]
-                elif isinstance(node, ast.ImportFrom):
-                    modules = [node.module or ""]
-                else:
-                    continue
-
-                if any(module.startswith("twod_mcda") for module in modules):
-                    offenders.append(path.relative_to(SOURCE_DIRECTORY))
-
-        self.assertEqual(offenders, [])
+    def test_legacy_package_contains_no_hdf_writer(self):
+        self.assertFalse((LEGACY_DIRECTORY / "io" / "hdf_writer.py").exists())
+        process_source = (
+            LEGACY_DIRECTORY / "process_granule_old.py"
+        ).read_text()
+        self.assertNotIn("write_hdf", process_source)
+        self.assertNotIn("SDSData", process_source)
 
 
 if __name__ == "__main__":

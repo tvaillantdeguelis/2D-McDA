@@ -208,6 +208,47 @@ def _store_slice(output, slice_data, profile_min, profile_max, file_min):
         output[name][output_slice, :] = slice_data.masks[name][input_slice, :]
 
 
+def _store_development(
+    output,
+    slice_development,
+    profile_min,
+    profile_max,
+    file_min,
+    profile_count,
+):
+    """Assemble development arrays using one shared profile dimension."""
+
+    store_min = profile_min - file_min
+    store_max = profile_max - file_min + 1
+
+    for name, values in slice_development.items():
+        values = np.asanyarray(values)
+        if values.ndim == 2:
+            profile_axis = 0
+        elif values.ndim == 3:
+            profile_axis = 1
+        else:
+            raise ValueError(
+                f"Unsupported development array shape for {name!r}: "
+                f"{values.shape}."
+            )
+
+        if name not in output:
+            shape = list(values.shape)
+            shape[profile_axis] = profile_count
+            fill_value = FILL_VALUE_FLOAT if values.dtype.kind == "f" else 0
+            if np.ma.isMaskedArray(values):
+                output[name] = np.ma.masked_all(shape, dtype=values.dtype)
+                output[name].set_fill_value(fill_value)
+            else:
+                output[name] = np.full(shape, fill_value, dtype=values.dtype)
+
+        if profile_axis == 0:
+            output[name][store_min:store_max, :] = values
+        else:
+            output[name][:, store_min:store_max, :] = values
+
+
 def _process_slice(request, profile_min, profile_max, previous, following, reader):
     print(
         "\n\n############################################################\n"
@@ -283,7 +324,15 @@ def process_granule_refactored(config):
                     following,
                     reader,
                 )
-                development = slice_data.development
+                if request.save_development_data:
+                    _store_development(
+                        development,
+                        slice_data.development,
+                        profile_min,
+                        profile_max,
+                        reader.prof_min,
+                        profile_count,
+                    )
 
                 print("\n\n*****Copy slice data to the whole data arrays...*****")
                 with timer("Copy slice data to the whole data arrays"):
@@ -303,6 +352,6 @@ def process_granule_refactored(config):
         longitude_max=reader.lon_max,
     )
 
-    print("\n\n############################################################\n*****Save data in HDF file...*****")
-    with timer("Save data in HDF file"):
+    print("\n\n############################################################\n*****Save data in netCDF file...*****")
+    with timer("Save data in netCDF file"):
         return write_product(request, result)

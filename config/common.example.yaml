@@ -12,4 +12,3 @@ output:
   root_directory: "/home/ticjo/Documents/Pro/Recherche/codes/projects/2D-McDA/data/output"
   product_type: "Dev"
   path_format: "2D_McDA.v{version}/{year}/{year}_{month:02d}_{day:02d}"
-  filetype: "HDF"

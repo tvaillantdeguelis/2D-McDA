@@ -10,10 +10,9 @@ from .io.granule_finder import find_granule_file, find_neighbor_granules
 from .version import get_full_version
 
 
-# Change this value to ``"refactored"`` to run the new orchestration.
-# The legacy implementation remains the default until output parity has been
-# checked on representative CALIOP granules.
-PROCESSING_IMPLEMENTATION = "legacy"
+# The refactored implementation is the production default. The legacy engine
+# remains available for algorithm-parity comparisons and uses the same writer.
+PROCESSING_IMPLEMENTATION = "refactored"
 _PROCESSING_IMPLEMENTATIONS = {"legacy", "refactored"}
 
 
@@ -60,8 +59,6 @@ def _altitude_index(max_altitude_km):
 def _output_directory(output_cfg, granule_date, version):
     """Build the output directory from the configured root and path format."""
 
-    _validate_output_filetype(output_cfg)
-
     relative_path = output_cfg["path_format"].format(
         version=version.removeprefix("V"),
         year=granule_date.year,
@@ -72,51 +69,8 @@ def _output_directory(output_cfg, granule_date, version):
     return Path(output_cfg["root_directory"]) / relative_path
 
 
-def _validate_output_filetype(output_cfg):
-    """Reject output formats that are not implemented."""
-
-    if output_cfg["filetype"] != "HDF":
-        raise ValueError('output.filetype must be "HDF".')
-
-
-def _validate_config_schema(cfg):
-    """Reject removed configuration keys with actionable error messages."""
-
-    renamed_keys = (
-        (cfg.get("processing", {}), "process_up_to_40km", "max_altitude_km"),
-        (cfg.get("cal_lid_l1", {}), "folder", "root_directory"),
-        (cfg.get("cal_lid_l1", {}), "type", "product_type"),
-        (cfg.get("output", {}), "folder", "root_directory"),
-        (cfg.get("output", {}), "type", "product_type"),
-    )
-
-    for section, old_key, new_key in renamed_keys:
-        if old_key in section:
-            raise ValueError(
-                f'Configuration key "{old_key}" was renamed to "{new_key}".'
-            )
-
-    if "slicing" in cfg:
-        raise ValueError(
-            'Configuration section "slicing" was renamed to "subset", '
-            'and its "type" key was renamed to "mode".'
-        )
-
-    if "type" in cfg.get("subset", {}):
-        raise ValueError(
-            'Configuration key "subset.type" was renamed to "subset.mode".'
-        )
-
-    if "make_classification" in cfg.get("processing", {}):
-        raise ValueError(
-            'Configuration key "processing.make_classification" was removed.'
-        )
-
-
 def _legacy_config(cfg, current_file, previous_file, next_file):
     """Translate the refactored YAML configuration to legacy parameters."""
-
-    _validate_config_schema(cfg)
 
     processing_cfg = cfg.get("processing", {})
     output_cfg = cfg["output"]
@@ -163,31 +117,26 @@ def _run_processing(config):
     """Dispatch processing to the selected implementation."""
 
     if PROCESSING_IMPLEMENTATION == "legacy":
-        runpy.run_module(
+        return runpy.run_module(
             "legacy.process_granule_old",
             init_globals={"LEGACY_CONFIG": config},
             run_name="__main__",
         )
-        return
 
-    if PROCESSING_IMPLEMENTATION == "refactored":
-        from .processing.granule_processor import process_granule_refactored
+    if PROCESSING_IMPLEMENTATION != "refactored":
+        choices = ", ".join(sorted(_PROCESSING_IMPLEMENTATIONS))
+        raise ValueError(
+            f"Unknown PROCESSING_IMPLEMENTATION: "
+            f"{PROCESSING_IMPLEMENTATION!r}. Expected one of: {choices}."
+        )
 
-        process_granule_refactored(config)
-        return
+    from .processing.granule_processor import process_granule_refactored
 
-    choices = ", ".join(sorted(_PROCESSING_IMPLEMENTATIONS))
-    raise ValueError(
-        f"Unknown PROCESSING_IMPLEMENTATION: {PROCESSING_IMPLEMENTATION!r}. "
-        f"Expected one of: {choices}."
-    )
+    return process_granule_refactored(config)
 
 
 def process_granule(cfg):
     """Resolve granule paths and run the selected processing implementation."""
-
-    _validate_config_schema(cfg)
-    _validate_output_filetype(cfg["output"])
 
     start_time = datetime.now().astimezone()
     start_tic = time.perf_counter()

@@ -1,107 +1,116 @@
-from netCDF4 import Dataset
+"""Utilities for writing self-describing netCDF-4 products."""
+
+from dataclasses import dataclass, field
 import os
+from pathlib import Path
+from uuid import uuid4
+
+from netCDF4 import Dataset
 import numpy as np
 
-# Format type: 'S1' or 'c' (NC_CHAR), 'i1' or 'b' or 'B' (NC_BYTE), 'u1' (NC_UBYTE),
-# 'i2' or 'h' or 's' (NC_SHORT), 'u2' (NC_USHORT), 'i4' or 'i' or 'l' (NC_INT), 'u4' (NC_UINT),
-# 'i8' (NC_INT64), 'u8' (NC_UINT64), 'f4' or 'f' (NC_FLOAT), 'f8' or 'd' (NC_DOUBLE)
+
+@dataclass
+class NetCDFVariable:
+    """Description of one variable in a netCDF product."""
+
+    name: str
+    data: np.ndarray
+    dimensions: tuple[str, ...] = ()
+    fill_value: int | float | None = None
+    attributes: dict[str, object] = field(default_factory=dict)
+    compress: bool = True
+
+    @property
+    def key(self):
+        """Backward-compatible alias for the variable name."""
+
+        return self.name
 
 
-class NetCDFVariable():
-    def __init__(self, key, data):
+def _dimensions(variables):
+    """Infer dimension sizes and reject inconsistent variable shapes."""
 
-        # Remove unecessary dimension (,1)
-        if data.shape[-1] == 1:
-            data = np.squeeze(data)
-            
-        self.key = key
-        self.data = data
-        self.format = data.dtype
-        self.fillvalue = None
-        self.units = None
-        self.long_name = None
-        self.dimensions = None
+    dimensions = {}
+    for variable in variables:
+        data = np.asanyarray(variable.data)
+        if data.ndim != len(variable.dimensions):
+            raise ValueError(
+                f"Variable {variable.name!r} has {data.ndim} dimensions, "
+                f"but {len(variable.dimensions)} names were provided."
+            )
+
+        for name, size in zip(variable.dimensions, data.shape):
+            if name in dimensions and dimensions[name] != size:
+                raise ValueError(
+                    f"Dimension {name!r} has conflicting sizes "
+                    f"{dimensions[name]} and {size}."
+                )
+            dimensions[name] = size
+
+    return dimensions
 
 
-def write_netcdf(filename, dims, vars):
+def _attributes(variable, dtype):
+    """Return attributes with numeric ranges encoded in the variable dtype."""
+
+    attributes = {
+        key: value
+        for key, value in variable.attributes.items()
+        if value is not None
+    }
+    for name in ("valid_range", "flag_values", "flag_masks"):
+        if name in attributes:
+            attributes[name] = np.asarray(attributes[name], dtype=dtype)
+    return attributes
+
+
+def write_netcdf(filename, variables, global_attributes=None):
+    """Write variables atomically in netCDF-4 format.
+
+    The resulting file uses the netCDF-4 enhanced data model with lossless
+    DEFLATE compression and the shuffle filter for non-scalar arrays.
     """
-    Create a netCDF file.
-    
-    :param filename: filename
-    :param dims: list of dimensions (NetCDFVariable object)
-    :param vars: list of variables (NetCDFVariable object)
-    """
-    
-    # Remove file if already exist
-    if os.path.isfile(filename):
-        os.remove(filename)
-    
-    # Create netCDF file
-    ncfile = Dataset(filename, mode='w', format='NETCDF4')
-    
-    # Create dimensions
-    for dim in dims:
-        if dim.data.ndim != 1:
-            raise Exception(f"Error: {dim.data.key} dimension ndim equal {dim.data.ndim}, should be 1.\n")
-        ncfile.createDimension(dim.key, dim.data.size)
-    
-    # Create variables
-    for dim in dims:
-        current_var = ncfile.createVariable(dim.key, dim.format, (dim.key,), fill_value=dim.fillvalue)
-        # current_var._FillValue = dim.fillvalue
-        current_var.units = dim.units
-        current_var.long_name = dim.long_name
-        current_var[:] = dim.data
-        
-    for var in vars:
-        current_var = ncfile.createVariable(var.key, var.format, var.dimensions, fill_value=var.fillvalue)
-        current_var.units = var.units
-        current_var.long_name = var.long_name
-        etendue = tuple([slice(var.data.shape[i]) for i in range(var.data.ndim)])
-        current_var[etendue] = var.data
-        
-    # Close file
-    ncfile.close()
-    print(f"{filename} created.")
-    
-    return
 
+    output_path = Path(filename)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    variables = tuple(variables)
+    dimensions = _dimensions(variables)
+    temporary_path = output_path.with_name(
+        f".{output_path.name}.{uuid4().hex}.tmp"
+    )
 
-if __name__ == '__main__':
-    filename = 'test.nc'
-    
-    lat = NetCDFVariable('lat', np.arange(-89, 89.1, 2))
-    lat.units = 'degrees_north'
-    lat.long_name = 'latitude'
-    lat.format = 'i2'
-    
-    lon = NetCDFVariable('lon', np.arange(1, 359.1, 2))
-    lon.units = 'degrees_east'
-    lon.long_name = 'longitude'
-    lon.format = 'i2'
-    
-    time = NetCDFVariable('time', np.arange(1, 4))
-    time.units = 'days'
-    time.long_name = 'time'
-    time.format = 'i2'
-    
-    dims = [lat, lon, time]
-    
-    map_1 = NetCDFVariable('map_1', np.ma.arange(lat.data.size*lon.data.size).reshape(lat.data.size, lon.data.size)/1000.)
-    map_1.fillvalue = -9999.
-    map_1.units = 'K'
-    map_1.long_name = 'Skin temperature'
-    map_1.dimensions = ('lat', 'lon')
-    map_1.data[40:60, 50:140] = np.ma.masked
-    map_1.format = 'f4'
-    
-    map_2 = NetCDFVariable('map_2', np.arange(lat.data.size*lon.data.size*time.data.size).reshape(lat.data.size, lon.data.size, time.data.size)/10.)
-    map_2.fillvalue = -9999.
-    map_2.units = 'K'
-    map_2.long_name = 'Sea Surface Temperature'
-    map_2.dimensions = ('lat', 'lon', 'time')
-    map_2.format = 'f4'
+    try:
+        with Dataset(temporary_path, mode="w", format="NETCDF4") as dataset:
+            dataset.setncatts(global_attributes or {})
 
-    vars = [map_1, map_2]
-    
-    write_netcdf(filename, dims, vars)
+            for name, size in dimensions.items():
+                dataset.createDimension(name, size)
+
+            for specification in variables:
+                data = np.asanyarray(specification.data)
+                options = {"fill_value": specification.fill_value}
+                if specification.compress and data.ndim and data.size > 1:
+                    options.update(
+                        compression="zlib",
+                        complevel=4,
+                        shuffle=True,
+                    )
+
+                variable = dataset.createVariable(
+                    specification.name,
+                    data.dtype,
+                    specification.dimensions,
+                    **options,
+                )
+                variable.setncatts(_attributes(specification, data.dtype))
+                if data.ndim:
+                    variable[:] = data
+                else:
+                    variable.assignValue(data.item())
+
+        os.replace(temporary_path, output_path)
+    except BaseException:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+    print(f"{output_path} created.")
