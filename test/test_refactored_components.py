@@ -1,25 +1,21 @@
-from contextlib import redirect_stdout
 from dataclasses import replace
-from io import StringIO
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from netCDF4 import Dataset
 import numpy as np
 
+from twod_mcda.caliop.reader import CALIPSOReader
 from twod_mcda.output.product import (
     build_output_variables,
     output_filename,
     write_product,
 )
+from twod_mcda.pipeline import _open_inputs, _store_development
 from twod_mcda.workflow.neighbors import append_adjacent_profiles
-from twod_mcda.workflow.processor import (
-    _load_initial_data,
-    _store_development,
-)
 from twod_mcda.workflow.models import ProcessingRequest, ProcessingResult
 
 
@@ -32,6 +28,7 @@ def request():
         previous_directory=None,
         next_granule=None,
         next_directory=None,
+        subset_active=True,
         subset_mode="profindex",
         subset_start=0,
         subset_end=None,
@@ -45,15 +42,47 @@ def request():
 
 
 class RefactoredComponentTests(unittest.TestCase):
-    @patch("twod_mcda.workflow.processor.open_caliop_reader")
-    def test_interior_subset_does_not_load_or_display_neighbors(self, open_reader):
+    @patch("twod_mcda.caliop.reader.HDF4Reader")
+    def test_caliop_reader_reads_only_the_requested_hyperslab(self, hdf_reader):
+        hdf = hdf_reader.return_value.__enter__.return_value
+        hdf.get_sds_keys.return_value = {
+            "Latitude": (0, (10,), 5, 0),
+            "Science": (1, (10, 2), 5, 0),
+            "Altitude": (2, (2,), 5, 0),
+        }
+        hdf.get_metadata_keys.return_value = ("Lidar_Data_Altitudes",)
+        hdf.get_metadata.return_value = [0.0, 1.0]
+        hdf.get_fillvalue.return_value = -9999.0
+        hdf.get_data.return_value = np.arange(6).reshape(3, 2)
+        reader = CALIPSOReader("granule.hdf")
+
+        first = reader.get_data("Science", 2, 4)
+        second = reader.get_data("Science", 2, 4)
+        altitude = reader.get_data("Lidar_Data_Altitudes")
+
+        np.testing.assert_array_equal(first, np.arange(6).reshape(3, 2))
+        np.testing.assert_array_equal(second, first)
+        self.assertIsInstance(altitude, np.ma.MaskedArray)
+        np.testing.assert_array_equal(altitude, np.array([0.0, 1.0]))
+        hdf.get_data.assert_called_once_with(
+            "Science",
+            start=[2, 0],
+            count=[3, 2],
+            do_squeeze=False,
+        )
+        reader.close()
+
+    @patch("twod_mcda.pipeline.open_granule")
+    def test_interior_subset_does_not_load_neighbors(self, open_granule):
         current_reader = SimpleNamespace(
             filepath="/data/current.hdf",
             prof_min=4000,
             prof_max=5000,
             data_reader=SimpleNamespace(nb_profiles=10000),
         )
-        open_reader.return_value = current_reader
+        open_granule.return_value = current_reader
+        stack = MagicMock()
+        stack.enter_context.side_effect = lambda reader: reader
         processing_request = replace(
             request(),
             previous_granule="previous",
@@ -62,24 +91,19 @@ class RefactoredComponentTests(unittest.TestCase):
             subset_end=5000,
         )
 
-        output = StringIO()
-        with redirect_stdout(output):
-            _load_initial_data(processing_request)
+        result = _open_inputs(processing_request, stack)
 
-        open_reader.assert_called_once()
-        self.assertIn("Current  : /data/current.hdf", output.getvalue())
-        self.assertNotIn("Previous :", output.getvalue())
-        self.assertNotIn("Next     :", output.getvalue())
+        open_granule.assert_called_once()
+        self.assertIs(result[0], current_reader)
+        self.assertIsNone(result[1])
+        self.assertIsNone(result[2])
 
-    @patch(
-        "twod_mcda.workflow.processor.load_processing_variables",
-        return_value={},
-    )
-    @patch("twod_mcda.workflow.processor.open_caliop_reader")
-    def test_full_granule_loads_and_displays_both_neighbors(
+    @patch("twod_mcda.pipeline.read_slice", return_value={})
+    @patch("twod_mcda.pipeline.open_granule")
+    def test_full_granule_loads_and_returns_both_neighbors(
         self,
-        open_reader,
-        load_processing_variables,
+        open_granule,
+        read_slice,
     ):
         current_reader = SimpleNamespace(
             filepath="/data/current.hdf",
@@ -87,24 +111,32 @@ class RefactoredComponentTests(unittest.TestCase):
             prof_max=9999,
             data_reader=SimpleNamespace(nb_profiles=10000),
         )
-        previous_reader = SimpleNamespace(filepath="/data/previous.hdf")
-        next_reader = SimpleNamespace(filepath="/data/next.hdf")
-        open_reader.side_effect = [current_reader, previous_reader, next_reader]
+        previous_reader = SimpleNamespace(
+            filepath="/data/previous.hdf",
+            prof_min=9500,
+            prof_max=9999,
+        )
+        next_reader = SimpleNamespace(
+            filepath="/data/next.hdf",
+            prof_min=0,
+            prof_max=499,
+        )
+        open_granule.side_effect = [current_reader, previous_reader, next_reader]
+        stack = MagicMock()
+        stack.enter_context.side_effect = lambda reader: reader
         processing_request = replace(
             request(),
             previous_granule="previous",
             next_granule="next",
         )
 
-        output = StringIO()
-        with redirect_stdout(output):
-            _load_initial_data(processing_request)
+        result = _open_inputs(processing_request, stack)
 
-        self.assertEqual(open_reader.call_count, 3)
-        self.assertEqual(load_processing_variables.call_count, 2)
-        self.assertIn("Previous : /data/previous.hdf", output.getvalue())
-        self.assertIn("Current  : /data/current.hdf", output.getvalue())
-        self.assertIn("Next     : /data/next.hdf", output.getvalue())
+        self.assertEqual(open_granule.call_count, 3)
+        self.assertEqual(read_slice.call_count, 2)
+        self.assertIs(result[0], current_reader)
+        self.assertIs(result[1], previous_reader)
+        self.assertIs(result[2], next_reader)
 
     def test_append_adjacent_profiles_keeps_altitude_unchanged(self):
         current = {
@@ -188,6 +220,25 @@ class RefactoredComponentTests(unittest.TestCase):
         )
         self.assertEqual(
             output_filename(request(), result),
+            "CAL_LID_L2_2D_McDA-Dev-V2-0-0."
+            "2010-01-01T00-22-28ZN.nc",
+        )
+        self.assertEqual(
+            output_filename(replace(request(), subset_start=None), result),
+            "CAL_LID_L2_2D_McDA-Dev-V2-0-0."
+            "2010-01-01T00-22-28ZN.nc",
+        )
+        self.assertEqual(
+            output_filename(
+                replace(
+                    request(),
+                    subset_active=False,
+                    subset_mode="longitude",
+                    subset_start=63.2,
+                    subset_end=61.3,
+                ),
+                result,
+            ),
             "CAL_LID_L2_2D_McDA-Dev-V2-0-0."
             "2010-01-01T00-22-28ZN.nc",
         )

@@ -4,24 +4,6 @@ Two-dimensional and multi-channel detection algorithm for the CALIPSO/CALIOP lid
 
 2D-McDA processes CALIOP Level 1 attenuated-backscatter profiles and produces two-dimensional feature-detection masks from the 532 nm parallel, 532 nm perpendicular, and 1064 nm channels.
 
-## Source-code organization
-
-The package is divided by responsibility:
-
-```text
-twod_mcda/
-├── algorithm/   # scientific detection, filtering and mask combination
-├── caliop/      # HDF4 access, CALIOP conventions and grid transformations
-├── workflow/    # granule, neighbor and slice orchestration
-├── output/      # netCDF schema and serialization
-├── utils/       # cross-cutting utilities
-└── pipeline.py  # public processing entry point
-```
-
-The scientific algorithm operates on NumPy arrays and masked arrays. CALIOP
-file access is confined to `caliop`, while `output` is responsible only for
-turning processing results into the final netCDF product.
-
 ## 1. Input and output data
 
 ### 1.1 Input
@@ -39,6 +21,12 @@ Files must be stored below the directory configured by `cal_lid_l1.root_director
 ```
 
 For each requested granule, the pipeline also looks for the preceding and following granules. They provide the neighboring profiles required to process the edges of the current granule continuously. The search includes the previous and next calendar days to handle granules close to midnight.
+
+Scientific arrays are read directly from HDF4 one profile slice at a time.
+Only the latitude and longitude coordinates needed to plan the run, the active
+slice, and the 500-profile edge regions of any required neighboring granules
+are retained as inputs. Complete detection masks are assembled in memory for
+the final netCDF write.
 
 ### 1.2 Output
 
@@ -156,6 +144,7 @@ include: common.yaml
 granule: "2010-01-18T00-19-57ZN"
 
 subset:
+  activate: true
   mode: "profindex"
   start: 4000
   end: 5000
@@ -163,8 +152,9 @@ subset:
 
 - `include` loads the common settings from a file in the same directory.
 - `granule` is the timestamp identifying the CALIOP file.
+- `subset.activate`: set to `false` to process the complete granule. The complete granule is also processed when the `subset` block is absent. When the block is present and `activate` is omitted, it defaults to `true` for backward compatibility.
 - `subset.mode` can be `profindex` or `longitude`.
-- For `profindex`, `start` and `end` are zero-based profile indexes and both bounds are included. Use `start: 0` and `end: null` for the complete granule.
+- For `profindex`, `start` and `end` are zero-based profile indexes and both bounds are included. Use `end: null` to extend an active subset to the last profile.
 - For `longitude`, `start` and `end` are longitude bounds in degrees. Their order must follow the direction of the satellite track.
 
 ### 3.3 Period settings: `config/period.yaml`

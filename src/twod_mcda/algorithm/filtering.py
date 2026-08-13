@@ -2,6 +2,7 @@
 
 import numpy as np
 from numba import jit
+from scipy.ndimage import convolve1d
 
 from twod_mcda.algorithm.flags import (
     FLAG_AFA,
@@ -149,97 +150,97 @@ def apply_window(height_window, width_window, feature, FLAG_DETECTION_LEVEL, min
 
 
 @jit(nopython=True)
-def neighbors(shape, p):
-    """Get neighbors of a pixel"""
-
-    v = []
-
-    if p[0] != shape[0]-1: # if not extreme right
-        v.append( (p[0]+1, p[1]) ) # add right neighbor
-
-    if p[0] != 0: # if not extreme left
-        v.append( (p[0]-1, p[1]) ) # add left neighbor
-
-    if p[1] != shape[1]-1: # if not extreme top
-        v.append( (p[0], p[1]+1) ) # add top neighbor
-
-    if p[1] != 0: # if not extreme bottom
-        v.append( (p[0], p[1]-1) ) # add bottom neighbor
-
-    return v
-
-
-@jit(nopython=True)
 def replace_maybe_jit(nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL,
                       prev_detect, prevprev_detect):
-    """Part extracted from replace_maybe function for faster processing with @jit"""
+    """Classify connected components containing ``FLAG_MAYBE`` pixels.
 
-    for i in np.arange(feature.shape[0]):
-        for j in np.arange(feature.shape[1]):
-            if not seen_pixels[i, j]:
-                if feature[i, j] == FLAG_MAYBE:
-                    connected_to_detected_pattern = False                      
-                    # Count neighbors
-                    accessible_pixels = [(i, j)]
-                    pattern_pixels = np.zeros(feature.shape)
-                    pattern_pixels[i, j] = True
-                    while (len(accessible_pixels) != 0):
-                        p = accessible_pixels[0] # 1st pixel of the list
-                        accessible_pixels = accessible_pixels[1:] # Remove 1st
-                        #-----------------------------------------------
-                        # if FA/low confidence on the left, check on the 
-                        # left of FA/low confidence if pattern connect 
-                        # to an already detected pattern
-                        i_FA_left = 1
-                        while (i - i_FA_left >= 1) &\
-                              (feature[p[0]-i_FA_left, p[1]] == FLAG_FA) |\
-                              (feature[p[0]-i_FA_left, p[1]] == FLAG_AFA) |\
-                              (feature[p[0]-i_FA_left, p[1]] == FLAG_SMALL_STRIPS):
-                            i_FA_left +=1
-                        if (i - i_FA_left >= 0) &\
-                           (feature[p[0]-i_FA_left, p[1]] == FLAG_DETECTION_LEVEL):
-                            connected_to_detected_pattern = True
-                        #-----------------------------------------------
-                        if not seen_pixels[p]:
-                            seen_pixels[p] = True # We note that we see this 
-                                                  # pixel
-                            v = neighbors(feature.shape, p) # Get pixel 
-                                                            # neighbors 
-                            # Look for neighbors
-                            for voisin in v:
-                                c1 = seen_pixels[voisin]
-                                c2 = feature[voisin] == FLAG_MAYBE # level n
-                                c3 = False
-                                c4 = False
-                                if FLAG_DETECTION_LEVEL > 1: # if previous
-                                                           # detection exists
-                                    if prev_detect:
-                                        c3 = feature[voisin]==FLAG_DETECTION_LEVEL-1
-                                                                  # level n - 1
-                                    else:
-                                        c3 == False
-                                    if prevprev_detect:
-                                        c4 = feature[voisin]==FLAG_DETECTION_LEVEL-2
-                                                                  # level n - 2
-                                    else:
-                                        c4== False
-                                if (not c1) & (c2 | c3 | c4):
-                                    accessible_pixels.append(voisin)
-                                    pattern_pixels[voisin] = 1
-                    
-                    count = int(np.round(np.sum(pattern_pixels)))
-                    # remove the too small "maybe pattern"
-                    px, py = np.where(pattern_pixels==1)
-                    for pix_i in np.arange(px.size):
-                        # unless already classify
-                        if feature[px[pix_i], py[pix_i]] == FLAG_MAYBE:
-                            if (count < nb_lim) &\
-                               (not connected_to_detected_pattern):
-                                # replace "maybe" by "nothing"
-                                feature[px[pix_i], py[pix_i]] = FLAG_NOTHING
-                            else:
-                                # replace "maybe" by the next level of detection
-                                feature[px[pix_i], py[pix_i]] = FLAG_DETECTION_LEVEL
+    The queue is allocated once and reused for every component.  Besides
+    avoiding a full-size temporary image per component, the head/tail indices
+    make removing a queue item O(1).
+    """
+
+    nb_rows, nb_cols = feature.shape
+    pixel_queue = np.empty(feature.size, dtype=np.int64)
+
+    for i in range(nb_rows):
+        for j in range(nb_cols):
+            if seen_pixels[i, j] or feature[i, j] != FLAG_MAYBE:
+                continue
+
+            # Store flat indices so that a single array is enough for both the
+            # breadth-first queue and the list of pixels in this component.
+            head = 0
+            tail = 1
+            pixel_queue[0] = i * nb_cols + j
+            seen_pixels[i, j] = True
+            connected_to_detected_pattern = False
+
+            while head < tail:
+                flat_index = pixel_queue[head]
+                head += 1
+                row = flat_index // nb_cols
+                col = flat_index - row * nb_cols
+
+                # If FA/low-confidence pixels are immediately to the left,
+                # look beyond them for an already detected pattern.  Use the
+                # current component pixel for the boundary check as intended.
+                left = row - 1
+                while left >= 0 and (
+                    feature[left, col] == FLAG_FA
+                    or feature[left, col] == FLAG_AFA
+                    or feature[left, col] == FLAG_SMALL_STRIPS
+                ):
+                    left -= 1
+                if (left >= 0
+                        and feature[left, col] == FLAG_DETECTION_LEVEL):
+                    connected_to_detected_pattern = True
+
+                # Test the four directly adjacent pixels without allocating a
+                # temporary neighbors list.
+                for direction in range(4):
+                    neighbor_row = row
+                    neighbor_col = col
+                    if direction == 0:
+                        neighbor_row += 1
+                    elif direction == 1:
+                        neighbor_row -= 1
+                    elif direction == 2:
+                        neighbor_col += 1
+                    else:
+                        neighbor_col -= 1
+
+                    if (neighbor_row < 0 or neighbor_row >= nb_rows
+                            or neighbor_col < 0 or neighbor_col >= nb_cols
+                            or seen_pixels[neighbor_row, neighbor_col]):
+                        continue
+
+                    neighbor_value = feature[neighbor_row, neighbor_col]
+                    is_accessible = neighbor_value == FLAG_MAYBE
+                    if FLAG_DETECTION_LEVEL > 1:
+                        if (prev_detect
+                                and neighbor_value == FLAG_DETECTION_LEVEL - 1):
+                            is_accessible = True
+                        if (prevprev_detect
+                                and neighbor_value == FLAG_DETECTION_LEVEL - 2):
+                            is_accessible = True
+
+                    if is_accessible:
+                        # Mark on insertion so a pixel cannot be queued by two
+                        # different neighbors.
+                        seen_pixels[neighbor_row, neighbor_col] = True
+                        pixel_queue[tail] = neighbor_row * nb_cols + neighbor_col
+                        tail += 1
+
+            replacement = FLAG_DETECTION_LEVEL
+            if tail < nb_lim and not connected_to_detected_pattern:
+                replacement = FLAG_NOTHING
+
+            for queue_index in range(tail):
+                flat_index = pixel_queue[queue_index]
+                row = flat_index // nb_cols
+                col = flat_index - row * nb_cols
+                if feature[row, col] == FLAG_MAYBE:
+                    feature[row, col] = replacement
 
     return feature
 
@@ -247,7 +248,7 @@ def replace_maybe_jit(nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL,
 def replace_maybe(n, feature, FLAG_DETECTION_LEVEL, prev_detect=True,
                   prevprev_detect=False):
     """Put flag 'FLAG_DETECTION_LEVEL' where patterns of connected 'FLAG_MAYBE'
-    pixels consist of more than n pixels
+    pixels consist of at least n pixels
     if prev_detect=True means that we also count detection pixels n-1
     if prevprev_detect=True means that we also count detection pixels n-2"""
 
@@ -502,157 +503,87 @@ def average_below_8_2(sr, sr_sigma):
     return new_sr, sr_sigma
 
 
-@jit(nopython=True)
-def gaussian_line_window_jit(nb_prof, nb_alt, width_window, gauss_sigma, sr, 
-                             new_sr, fill_value, feature):
-    """Part extracted from gaussian_line_window function for faster processing 
-    with @jit"""
-
-    # Loop on profiles
-    for i in np.arange(nb_prof):
-        # From bottom go up
-        for j in np.arange(nb_alt):
-            # Apply n-elements line gaussian sliding window
-            nside = int((width_window-1)/2)
-            x = np.arange(width_window) - nside
-            gaussian = np.exp(-x**2/(2*gauss_sigma**2))
-            nb_prof_averaged = np.sum(gaussian)
-            if sr[i, j] != fill_value:
-                # Horizontal averaging (if not left/right edge)
-                if not (i < nside) | (i > nb_prof - (nside+1)):
-                    line = sr[i-nside:i+(nside+1), j]
-                    gaussian = gaussian[line!=fill_value] # first
-                    line = line[line!=fill_value] # then (in this order!)
-                    new_sr[i, j] = np.sum(line*gaussian)/np.sum(gaussian)
-            # Also apply window where special flags (FA, AFA, likely artifact, 
-            # and no confidence)
-            elif (feature[i,j] == FLAG_FA) | (feature[i,j] == FLAG_AFA) |\
-                 (feature[i,j] == FLAG_LIKELY_ARTIFACT) |\
-                 (feature[i,j] == FLAG_SMALL_STRIPS):
-                if not (i < nside) | (i > nb_prof - (nside+1)):
-                    line = sr[i-nside:i+(nside+1), j]
-                    no_special_flag = line!=fill_value
-                    nb_no_special_flag = np.sum(no_special_flag)
-                    if nb_no_special_flag != 0: # if not all FA or AFA
-                        gaussian = gaussian[line!=fill_value] # first
-                        line = line[line!=fill_value] # then (in this order!)
-                        new_sr[i, j] = np.sum(line*gaussian)/np.sum(gaussian)
-
-    return new_sr, nb_prof_averaged
-
-
-def gaussian_line_window(width_window, gauss_sigma, sr, feature, sr_sigma):
-    """Apply a horizontal gaussian averaging window to the ATSR signal"""
-
-    # Initialization
-    nb_prof = sr.shape[0]
-    nb_alt = sr.shape[1]
-    sr2 = np.ma.asarray(sr).filled(FILL_VALUE_FLOAT)
-
-    new_sr = np.full(
-        sr.shape,
-        FILL_VALUE_FLOAT,
-        dtype=float,
-    )
-
-    feature_values, _ = feature_for_numba(feature)
-
-    # width_window should be odd numbers
-    if width_window%2 != 1:
-        raise ValueError(f"width_window (= {width_window}) should be odd")
-
-    # Apply gaussian line averaging
-    new_sr, nb_prof_averaged = gaussian_line_window_jit(nb_prof, nb_alt, width_window, gauss_sigma,
-                                                        sr2, new_sr, FILL_VALUE_FLOAT, feature_values)
-    
-    # Mask where FILL_VALUE_FLOAT
-    new_sr = np.ma.masked_where(
-        new_sr == FILL_VALUE_FLOAT,
-        new_sr,
-    )
-
-    # Adapt SR threshold
-    sr_sigma = sr_sigma/np.sqrt(nb_prof_averaged)
-
-    return new_sr, sr_sigma
-
-
-@jit(nopython=True)
-def gaussian_2d_window_jit(nb_prof, nb_alt, ab_signal, new_ab, gaussian_2d, h_nside, v_nside, fill_value, feature):
-    """Part extracted from gaussian_line_window function for faster processing 
-    with @jit"""
-
-    # Loop on profiles
-    for i in np.arange(nb_prof):
-        # From bottom go up
-        for j in np.arange(nb_alt):
-            # Apply 2-D gaussian sliding window
-            if ab_signal[i, j] != fill_value:
-                # Averaging (if not at an edge of the image)
-                if not (i < h_nside) | (i > nb_prof - (h_nside+1)) | (j < v_nside) | (j > nb_alt - (v_nside+1)):
-                    window = ab_signal[i-h_nside:i+(h_nside+1), j-v_nside:j+(v_nside+1)]
-                    gaussian_2d_vector_without_fillvalues = np.array(())
-                    window_vector_without_fillvalues = np.array(())
-                    for i_window in np.arange(window.shape[0]):
-                        for j_window in np.arange(window.shape[1]):
-                            if window[i_window, j_window] != fill_value:
-                                gaussian_2d_vector_without_fillvalues = np.append(gaussian_2d_vector_without_fillvalues, gaussian_2d[i_window, j_window])
-                                window_vector_without_fillvalues = np.append(window_vector_without_fillvalues, window[i_window, j_window])
-                    new_ab[i, j] = np.sum(window_vector_without_fillvalues*gaussian_2d_vector_without_fillvalues)/np.sum(gaussian_2d_vector_without_fillvalues)
-            # Also apply window where special flags (FA, AFA, likely artifact, no confidence, and spikes)
-            elif (feature[i,j] == FLAG_FA) |\
-                 (feature[i,j] == FLAG_AFA) |\
-                 (feature[i,j] == FLAG_LIKELY_ARTIFACT) |\
-                 (feature[i,j] == FLAG_SMALL_STRIPS):
-                if not (i < h_nside) | (i > nb_prof - (h_nside+1)) | (j < v_nside) | (j > nb_alt - (v_nside+1)):
-                    window = ab_signal[i-h_nside:i+(h_nside+1), j-v_nside:j+(v_nside+1)]
-                    no_special_flag = window != fill_value
-                    nb_no_special_flag = np.sum(no_special_flag)
-                    if nb_no_special_flag != 0: # if not all FA or AFA
-                        gaussian_2d_vector_without_fillvalues = np.array(())
-                        window_vector_without_fillvalues = np.array(())
-                        for i_window in np.arange(window.shape[0]):
-                            for j_window in np.arange(window.shape[1]):
-                                if window[i_window, j_window] != fill_value:
-                                    gaussian_2d_vector_without_fillvalues = np.append(gaussian_2d_vector_without_fillvalues, gaussian_2d[i_window, j_window])
-                                    window_vector_without_fillvalues = np.append(window_vector_without_fillvalues, window[i_window, j_window])
-                        new_ab[i, j] = np.sum(window_vector_without_fillvalues*gaussian_2d_vector_without_fillvalues)/np.sum(gaussian_2d_vector_without_fillvalues)
-
-    return new_ab
-
-
-def gaussian_2d_window(width_window, horizontal_gauss_sigma, ab_signal, feature, ab_sigma, height_window=7, vertical_gauss_sigma=3):
+def gaussian_2d_window(
+    width_window,
+    horizontal_gauss_sigma,
+    ab_signal,
+    feature,
+    ab_sigma,
+    height_window=7,
+    vertical_gauss_sigma=3,
+):
     """Apply a 2-D gaussian averaging window to the AB signal"""
 
     # Initialization
-    nb_prof = ab_signal.shape[0]
-    nb_alt = ab_signal.shape[1]
-    ab2 = np.ma.copy(ab_signal)
-    # ab2 = np.ma.masked_where(feature != FLAG_NOTHING, ab_signal) # mask where not "nothing"
-    ab2 = ab2.filled(FILL_VALUE_FLOAT) # fill mask value to use jit
-    new_ab = np.ma.ones(ab_signal.shape)*FILL_VALUE_FLOAT
-    new_ab = new_ab.filled(FILL_VALUE_FLOAT)
-    copy_feature = np.ma.copy(feature)  
+    ab2 = np.ma.asarray(ab_signal).filled(FILL_VALUE_FLOAT).astype(float, copy=False)
+    new_ab = np.full(ab_signal.shape, FILL_VALUE_FLOAT, dtype=float)
     copy_feature = np.ma.asarray(feature).filled(FLAG_SURFACE)
 
     # width_window should be odd numbers
-    if width_window%2 != 1:
+    if width_window % 2 != 1:
         raise ValueError(f"width_window (= {width_window}) should be odd")
 
     # Apply gaussian 2-D averaging
-    h_nside = np.int64((width_window-1)/2)
+    h_nside = np.int64((width_window - 1) / 2)
     x = np.arange(width_window) - h_nside
-    v_nside = np.int64((height_window-1)/2)
+    v_nside = np.int64((height_window - 1) / 2)
     y = np.arange(height_window) - v_nside
-    gaussian_2d = np.outer(np.exp(-x**2/(2*horizontal_gauss_sigma**2)), np.exp(-y**2/(2*vertical_gauss_sigma**2))) # np.outer: matrix from product of two vectors
-    nb_prof_averaged = np.sum(gaussian_2d)
-    new_ab = gaussian_2d_window_jit(nb_prof, nb_alt, ab2, new_ab, gaussian_2d, h_nside, v_nside, FILL_VALUE_FLOAT, copy_feature)
-    
-    # Mask where FILL_VALUE_FLOAT
-    new_ab = np.ma.masked_where(new_ab==FILL_VALUE_FLOAT, new_ab)
-    ab2 = np.ma.masked_where(ab2==FILL_VALUE_FLOAT, ab2)
+    horizontal_gaussian = np.exp(-x**2 / (2 * horizontal_gauss_sigma**2))
+    vertical_gaussian = np.exp(-y**2 / (2 * vertical_gauss_sigma**2))
+    nb_prof_averaged = np.sum(np.outer(horizontal_gaussian, vertical_gaussian))
 
+    # Normalize by the locally available Gaussian weights so masked samples do
+    # not reduce the average. The 2-D Gaussian is separable, hence two 1-D
+    # convolutions give the same result at a much lower cost.
+    valid = ab2 != FILL_VALUE_FLOAT
+    weighted_signal = np.where(valid, ab2, 0.0)
+    numerator = convolve1d(
+        weighted_signal,
+        horizontal_gaussian,
+        axis=0,
+        mode="constant",
+        cval=0.0,
+    )
+    numerator = convolve1d(
+        numerator,
+        vertical_gaussian,
+        axis=1,
+        mode="constant",
+        cval=0.0,
+    )
+    denominator = convolve1d(
+        valid.astype(float),
+        horizontal_gaussian,
+        axis=0,
+        mode="constant",
+        cval=0.0,
+    )
+    denominator = convolve1d(
+        denominator,
+        vertical_gaussian,
+        axis=1,
+        mode="constant",
+        cval=0.0,
+    )
+
+    special = (
+        (copy_feature == FLAG_FA)
+        | (copy_feature == FLAG_AFA)
+        | (copy_feature == FLAG_LIKELY_ARTIFACT)
+        | (copy_feature == FLAG_SMALL_STRIPS)
+    )
+    eligible = (valid | special) & (denominator != 0)
+    if h_nside:
+        eligible[:h_nside, :] = False
+        eligible[-h_nside:, :] = False
+    if v_nside:
+        eligible[:, :v_nside] = False
+        eligible[:, -v_nside:] = False
+    np.divide(numerator, denominator, out=new_ab, where=eligible)
+
+    # Mask where FILL_VALUE_FLOAT
+    new_ab = np.ma.masked_where(new_ab == FILL_VALUE_FLOAT, new_ab)
     # Adapt SR threshold
-    ab_sigma = ab_sigma/np.sqrt(nb_prof_averaged)
+    ab_sigma = ab_sigma / np.sqrt(nb_prof_averaged)
 
     return new_ab, ab_sigma

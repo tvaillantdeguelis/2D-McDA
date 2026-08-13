@@ -1,6 +1,7 @@
 """Low-level HDF4 reader used by the CALIOP adapter."""
 
 import pyhdf.VS
+import numpy as np
 
 from pyhdf.HDF import HDF
 from pyhdf.SD import SD
@@ -21,6 +22,9 @@ class HDF4Reader:
     
     # __enter__ method for the "with" statement
     def __enter__(self):
+        if self._sd_interface is not None:
+            return self
+
         try:
             self._sd_interface = SD(self.file_path)
             self._hdf_interface = HDF(self.file_path)
@@ -44,10 +48,13 @@ class HDF4Reader:
     def __exit__(self, *args):
         if self._vs_interface:
             self._vs_interface.end()
+            self._vs_interface = None
         if self._sd_interface:
             self._sd_interface.end()
+            self._sd_interface = None
         if self._hdf_interface:
             self._hdf_interface.close()
+            self._hdf_interface = None
 
     def _load_metadata(self):
         metadata = self._vs_interface.attach("metadata")
@@ -78,23 +85,43 @@ class HDF4Reader:
         """
         return self._sd_interface.datasets()
 
-    def get_data(self, key, do_squeeze=True):
+    def get_data(
+        self,
+        key,
+        start=None,
+        count=None,
+        stride=None,
+        do_squeeze=True,
+    ):
+        """Read a complete SDS or a selected hyperslab."""
+
+        dataset = self._sd_interface.select(key)
         try:
-            data = self._sd_interface.select(key).get()
+            data = dataset.get(start=start, count=count, stride=stride)
         except HDF4Error:
             print("Error: '%s' is not in %s." % (key, self.file_path))
             raise
+        finally:
+            dataset.endaccess()
 
+        data = np.asanyarray(data)
         if do_squeeze:
             data = data.squeeze()
 
         return data
     
     def get_fillvalue(self, key):
+        dataset = self._sd_interface.select(key)
         try:
-            return self._sd_interface.select(key).getfillvalue()
-        except HDF4Error:
-            return None
+            try:
+                fill_value = dataset.getfillvalue()
+            except HDF4Error:
+                fill_value = None
+            if fill_value is None:
+                fill_value = dataset.attributes().get("fillvalue")
+            return fill_value
+        finally:
+            dataset.endaccess()
 
 if __name__ == '__main__':
 

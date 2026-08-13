@@ -12,7 +12,7 @@ This script:
 import argparse
 
 from config_loader import load_config
-from twod_mcda.pipeline import process_granule
+from twod_mcda.pipeline import run_granule_pipeline
 
 
 def main():
@@ -36,7 +36,7 @@ def main():
 
     cfg = load_config(args.config_file)
 
-    process_granule(cfg)
+    run_granule_pipeline(cfg)
 
 
 if __name__ == "__main__":
