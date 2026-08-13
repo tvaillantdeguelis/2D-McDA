@@ -1,6 +1,11 @@
+from contextlib import redirect_stdout
+from dataclasses import replace
+from io import StringIO
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from netCDF4 import Dataset
 import numpy as np
@@ -11,34 +16,96 @@ from twod_mcda.io.product_writer import (
     write_product,
 )
 from twod_mcda.preprocessing.neighbors import append_adjacent_profiles
-from twod_mcda.processing.granule_processor import _store_development
+from twod_mcda.processing.granule_processor import (
+    _load_initial_data,
+    _store_development,
+)
 from twod_mcda.processing.models import ProcessingRequest, ProcessingResult
 
 
 def request():
-    return ProcessingRequest.from_mapping(
-        {
-            "granule_date": "2010-01-01T00-22-28ZN",
-            "cal_lid_l1_version": "V5.00",
-            "cal_lid_l1_type": "Standard",
-            "folder_path": "/data/current",
-            "previous_granule": None,
-            "previous_folder_path": None,
-            "next_granule": None,
-            "next_folder_path": None,
-            "slice_type": "profindex",
-            "slice_start": 0,
-            "slice_end": None,
-            "save_development_data": False,
-            "version_2d_mcda": "V2.0.0",
-            "type_2d_mcda": "Dev",
-            "out_folder": "/output",
-            "index30m_alt_max": 600,
-        }
+    return ProcessingRequest(
+        granule_date="2010-01-01T00-22-28ZN",
+        caliop_version="V5.00",
+        current_directory=Path("/data/current"),
+        previous_granule=None,
+        previous_directory=None,
+        next_granule=None,
+        next_directory=None,
+        subset_mode="profindex",
+        subset_start=0,
+        subset_end=None,
+        save_development_data=False,
+        output_version="V2.0.0",
+        output_product_type="Dev",
+        output_directory=Path("/output"),
+        maximum_altitude_km=30,
+        maximum_altitude_index=600,
     )
 
 
 class RefactoredComponentTests(unittest.TestCase):
+    @patch("twod_mcda.processing.granule_processor.open_caliop_reader")
+    def test_interior_subset_does_not_load_or_display_neighbors(self, open_reader):
+        current_reader = SimpleNamespace(
+            filepath="/data/current.hdf",
+            prof_min=4000,
+            prof_max=5000,
+            data_reader=SimpleNamespace(nb_profiles=10000),
+        )
+        open_reader.return_value = current_reader
+        processing_request = replace(
+            request(),
+            previous_granule="previous",
+            next_granule="next",
+            subset_start=4000,
+            subset_end=5000,
+        )
+
+        output = StringIO()
+        with redirect_stdout(output):
+            _load_initial_data(processing_request)
+
+        open_reader.assert_called_once()
+        self.assertIn("Current  : /data/current.hdf", output.getvalue())
+        self.assertNotIn("Previous :", output.getvalue())
+        self.assertNotIn("Next     :", output.getvalue())
+
+    @patch(
+        "twod_mcda.processing.granule_processor.load_processing_variables",
+        return_value={},
+    )
+    @patch("twod_mcda.processing.granule_processor.open_caliop_reader")
+    def test_full_granule_loads_and_displays_both_neighbors(
+        self,
+        open_reader,
+        load_processing_variables,
+    ):
+        current_reader = SimpleNamespace(
+            filepath="/data/current.hdf",
+            prof_min=0,
+            prof_max=9999,
+            data_reader=SimpleNamespace(nb_profiles=10000),
+        )
+        previous_reader = SimpleNamespace(filepath="/data/previous.hdf")
+        next_reader = SimpleNamespace(filepath="/data/next.hdf")
+        open_reader.side_effect = [current_reader, previous_reader, next_reader]
+        processing_request = replace(
+            request(),
+            previous_granule="previous",
+            next_granule="next",
+        )
+
+        output = StringIO()
+        with redirect_stdout(output):
+            _load_initial_data(processing_request)
+
+        self.assertEqual(open_reader.call_count, 3)
+        self.assertEqual(load_processing_variables.call_count, 2)
+        self.assertIn("Previous : /data/previous.hdf", output.getvalue())
+        self.assertIn("Current  : /data/current.hdf", output.getvalue())
+        self.assertIn("Next     : /data/next.hdf", output.getvalue())
+
     def test_append_adjacent_profiles_keeps_altitude_unchanged(self):
         current = {
             "Profile_Time": np.array([2.0, 3.0]),

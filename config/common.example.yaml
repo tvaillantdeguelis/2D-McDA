@@ -1,7 +1,6 @@
 cal_lid_l1:
   root_directory: "/home/ticjo/Documents/Pro/Recherche/codes/DATA/CALIOP"
   version: "5.00"
-  product_type: "Standard"
   path_format: "CAL_LID_L1.v{version}/{year}/{year}_{month:02d}_{day:02d}"
 
 processing:

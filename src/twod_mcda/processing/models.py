@@ -1,4 +1,4 @@
-"""Data structures used by the refactored processing orchestration."""
+"""Data structures used by the processing orchestration."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,7 +15,6 @@ class ProcessingRequest:
 
     granule_date: str
     caliop_version: str
-    caliop_product_type: str
     current_directory: Path
     previous_granule: str | None
     previous_directory: Path | None
@@ -28,34 +27,8 @@ class ProcessingRequest:
     output_version: str
     output_product_type: str
     output_directory: Path
+    maximum_altitude_km: int
     maximum_altitude_index: int | None
-
-    @classmethod
-    def from_mapping(cls, values):
-        """Build a request from the mapping shared with the legacy runner."""
-
-        def optional_path(value):
-            return Path(value) if value is not None else None
-
-        return cls(
-            granule_date=values["granule_date"],
-            caliop_version=values["cal_lid_l1_version"],
-            caliop_product_type=values["cal_lid_l1_type"],
-            current_directory=Path(values["folder_path"]),
-            previous_granule=values["previous_granule"],
-            previous_directory=optional_path(values["previous_folder_path"]),
-            next_granule=values["next_granule"],
-            next_directory=optional_path(values["next_folder_path"]),
-            subset_mode=values["slice_type"],
-            subset_start=values["slice_start"],
-            subset_end=values["slice_end"],
-            save_development_data=values["save_development_data"],
-            output_version=values["version_2d_mcda"],
-            output_product_type=values["type_2d_mcda"],
-            output_directory=Path(values["out_folder"]),
-            maximum_altitude_index=values["index30m_alt_max"],
-        )
-
 
 @dataclass
 class SliceData:

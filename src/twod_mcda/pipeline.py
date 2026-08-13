@@ -1,19 +1,14 @@
-"""Top-level processing pipeline and implementation selector."""
+"""Top-level processing pipeline."""
 
 from datetime import datetime
 from pathlib import Path
 import re
-import runpy
 import time
 
 from .io.granule_finder import find_granule_file, find_neighbor_granules
+from .processing.granule_processor import process_granule as run_processing
+from .processing.models import ProcessingRequest
 from .version import get_full_version
-
-
-# The refactored implementation is the production default. The legacy engine
-# remains available for algorithm-parity comparisons and uses the same writer.
-PROCESSING_IMPLEMENTATION = "refactored"
-_PROCESSING_IMPLEMENTATIONS = {"legacy", "refactored"}
 
 
 _GRANULE_ID_PATTERN = re.compile(
@@ -22,7 +17,7 @@ _GRANULE_ID_PATTERN = re.compile(
 
 
 def _granule_id(file_path):
-    """Extract the full legacy granule identifier, including day/night."""
+    """Extract the full granule identifier, including day/night."""
 
     if file_path is None:
         return None
@@ -35,8 +30,8 @@ def _granule_id(file_path):
     return match.group(1)
 
 
-def _legacy_version(version):
-    """Return a version using the upper-case prefix expected by legacy code."""
+def _normalized_version(version):
+    """Return a version with the upper-case prefix used in product metadata."""
 
     if version[:1].lower() == "v":
         return f"V{version[1:]}"
@@ -44,7 +39,7 @@ def _legacy_version(version):
 
 
 def _altitude_index(max_altitude_km):
-    """Map a supported maximum altitude to the legacy grid index."""
+    """Map a supported maximum altitude to the regular-grid index."""
 
     if max_altitude_km == 30:
         return 600
@@ -69,97 +64,66 @@ def _output_directory(output_cfg, granule_date, version):
     return Path(output_cfg["root_directory"]) / relative_path
 
 
-def _legacy_config(cfg, current_file, previous_file, next_file):
-    """Translate the refactored YAML configuration to legacy parameters."""
+def _processing_request(cfg, current_file, previous_file, next_file):
+    """Build a processing request from the YAML configuration and inputs."""
 
     processing_cfg = cfg.get("processing", {})
     output_cfg = cfg["output"]
     subset_cfg = cfg.get("subset", {})
     caliop_cfg = cfg["cal_lid_l1"]
-    version = _legacy_version(get_full_version())
+    version = _normalized_version(get_full_version())
     granule_date = _granule_id(current_file)
     granule_time = datetime.strptime(
         granule_date[:19],
         "%Y-%m-%dT%H-%M-%S",
     )
 
-    return {
-        "granule_date": granule_date,
-        "cal_lid_l1_version": _legacy_version(str(caliop_cfg["version"])),
-        "cal_lid_l1_type": caliop_cfg["product_type"],
-        "folder_path": str(Path(current_file).parent),
-        "previous_granule": _granule_id(previous_file),
-        "previous_folder_path": (
-            str(Path(previous_file).parent) if previous_file is not None else None
+    return ProcessingRequest(
+        granule_date=granule_date,
+        caliop_version=_normalized_version(str(caliop_cfg["version"])),
+        current_directory=Path(current_file).parent,
+        previous_granule=_granule_id(previous_file),
+        previous_directory=(
+            Path(previous_file).parent if previous_file is not None else None
         ),
-        "next_granule": _granule_id(next_file),
-        "next_folder_path": (
-            str(Path(next_file).parent) if next_file is not None else None
+        next_granule=_granule_id(next_file),
+        next_directory=(
+            Path(next_file).parent if next_file is not None else None
         ),
-        "slice_type": subset_cfg.get("mode", "profindex"),
-        "slice_start": subset_cfg.get("start"),
-        "slice_end": subset_cfg.get("end"),
-        "save_development_data": processing_cfg.get(
+        subset_mode=subset_cfg.get("mode", "profindex"),
+        subset_start=subset_cfg.get("start"),
+        subset_end=subset_cfg.get("end"),
+        save_development_data=processing_cfg.get(
             "save_development_data", False
         ),
-        "version_2d_mcda": version,
-        "type_2d_mcda": output_cfg.get("product_type", "Dev"),
-        "out_folder": str(
-            _output_directory(output_cfg, granule_time, version)
-        ),
-        "index30m_alt_max": _altitude_index(
+        output_version=version,
+        output_product_type=output_cfg.get("product_type", "Dev"),
+        output_directory=_output_directory(output_cfg, granule_time, version),
+        maximum_altitude_km=processing_cfg["max_altitude_km"],
+        maximum_altitude_index=_altitude_index(
             processing_cfg["max_altitude_km"]
         ),
-    }
-
-
-def _run_processing(config):
-    """Dispatch processing to the selected implementation."""
-
-    if PROCESSING_IMPLEMENTATION == "legacy":
-        return runpy.run_module(
-            "legacy.process_granule_old",
-            init_globals={"LEGACY_CONFIG": config},
-            run_name="__main__",
-        )
-
-    if PROCESSING_IMPLEMENTATION != "refactored":
-        choices = ", ".join(sorted(_PROCESSING_IMPLEMENTATIONS))
-        raise ValueError(
-            f"Unknown PROCESSING_IMPLEMENTATION: "
-            f"{PROCESSING_IMPLEMENTATION!r}. Expected one of: {choices}."
-        )
-
-    from .processing.granule_processor import process_granule_refactored
-
-    return process_granule_refactored(config)
+    )
 
 
 def process_granule(cfg):
-    """Resolve granule paths and run the selected processing implementation."""
+    """Resolve granule paths and run the processing pipeline."""
 
     start_time = datetime.now().astimezone()
     start_tic = time.perf_counter()
-    print(f"Start time: {start_time}")
+    print(f"Start time: {start_time}\n")
 
     granule_time = datetime.strptime(cfg["granule"], "%Y-%m-%dT%H-%M-%SZN")
     current_file = find_granule_file(cfg, granule_time)
     previous_file, next_file = find_neighbor_granules(cfg, current_file)
 
-    print(f"Previous granule: {previous_file}")
-    print(f"Current granule : {current_file}")
-    print(f"Next granule    : {next_file}")
-
-    processing_config = _legacy_config(
+    request = _processing_request(
         cfg,
         current_file,
         previous_file,
         next_file,
     )
-
-    print(f"2D-McDA version: {processing_config['version_2d_mcda']}")
-    print(f"Processing implementation: {PROCESSING_IMPLEMENTATION}")
-    _run_processing(processing_config)
+    run_processing(request)
 
     end_time = datetime.now().astimezone()
     total_time = time.perf_counter() - start_tic
