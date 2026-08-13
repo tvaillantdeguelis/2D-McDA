@@ -39,25 +39,22 @@ DETECTION_MASKS = (
 )
 
 
-def _print_request(request):
-    print("\n*****Configuration parameters...*****")
-    values = (
-        ("GRANULE_DATE", request.granule_date),
-        ("VERSION_CAL_LID_L1", request.caliop_version),
-        ("TYPE_CAL_LID_L1", request.caliop_product_type),
-        ("FOLDER_PATH", request.current_directory),
-        ("PREVIOUS_GRANULE", request.previous_granule),
-        ("NEXT_GRANULE", request.next_granule),
-        ("SLICE_START_END_TYPE", request.subset_mode),
-        ("SLICE_START", request.subset_start),
-        ("SLICE_END", request.subset_end),
-        ("SAVE_DEVELOPMENT_DATA", request.save_development_data),
-        ("VERSION_2D_McDA", request.output_version),
-        ("TYPE_2D_McDA", request.output_product_type),
-        ("OUT_FOLDER", request.output_directory),
-    )
-    for name, value in values:
-        print(f"\t{name} = {value}")
+def _print_request(request, reader, previous_reader, next_reader):
+    """Print only the input and processing settings useful to the user."""
+
+    print("\n*****2D-McDA configuration*****")
+    print(f"2D-McDA version        : {request.output_version}")
+    print(f"CALIOP L1 version      : {request.caliop_version}")
+    print(f"Save development data : {request.save_development_data}")
+    print(f"Maximum altitude       : {request.maximum_altitude_km} km")
+    print(f"Subset mode            : {request.subset_mode}")
+    print(f"Subset limits          : {request.subset_start} -> {request.subset_end}")
+    print("Granules:")
+    if previous_reader is not None:
+        print(f"  Previous : {previous_reader.filepath}")
+    print(f"  Current  : {reader.filepath}")
+    if next_reader is not None:
+        print(f"  Next     : {next_reader.filepath}")
 
 
 def _load_initial_data(request):
@@ -71,16 +68,19 @@ def _load_initial_data(request):
         request.subset_end,
         request.subset_mode,
     )
-    print(f"\tGranule path: {reader.filepath}")
-    print(
-        f"\tFrom min profile index {reader.prof_min:d} "
-        f"(lat = {reader.lat_min:.2f} / lon = {reader.lon_min:.2f}) "
-        f"to max profile index {reader.prof_max:d} "
-        f"(lat = {reader.lat_max:.2f} / lon = {reader.lon_max:.2f})"
+    starts, ends = get_slice_bounds(
+        reader.prof_min,
+        reader.prof_max,
+        NB_PROF_SLICE,
+        NB_PROF_OVERLAP,
     )
+    granule_last_profile = reader.data_reader.nb_profiles - 1
+    needs_previous = starts[0] == 0
+    needs_next = ends[-1] == granule_last_profile
 
+    previous_reader = None
     previous = None
-    if request.previous_granule is not None:
+    if needs_previous and request.previous_granule is not None:
         previous_reader = open_caliop_reader(
             request,
             request.previous_granule,
@@ -88,11 +88,11 @@ def _load_initial_data(request):
             -NB_PROF_OVERLAP,
             None,
         )
-        print(f"\tPrevious granule path: {previous_reader.filepath}")
         previous = load_processing_variables(previous_reader)
 
+    next_reader = None
     following = None
-    if request.next_granule is not None:
+    if needs_next and request.next_granule is not None:
         next_reader = open_caliop_reader(
             request,
             request.next_granule,
@@ -100,14 +100,15 @@ def _load_initial_data(request):
             None,
             NB_PROF_OVERLAP,
         )
-        print(f"\tNext granule path: {next_reader.filepath}")
         following = load_processing_variables(next_reader)
 
-    return reader, previous, following
+    _print_request(request, reader, previous_reader, next_reader)
+
+    return reader, previous, following, starts, ends
 
 
 def _empty_output(profile_count, altitude_count):
-    """Allocate arrays using the same dtypes and fill values as the legacy code."""
+    """Allocate arrays with the product dtypes and fill values."""
 
     return {
         "Profile_ID": np.ones(profile_count, dtype=np.int32) * FILL_VALUE_FLOAT,
@@ -289,26 +290,17 @@ def _process_slice(request, profile_min, profile_max, previous, following, reade
     return slice_data
 
 
-def process_granule_refactored(config):
-    """Run the current algorithm through the refactored orchestration."""
-
-    request = ProcessingRequest.from_mapping(config)
-    _print_request(request)
+def process_granule(request: ProcessingRequest):
+    """Process one resolved CALIOP granule request."""
 
     print("\n*****CALIOP L1 data...*****")
     with timer("CALIOP L1 data"):
-        reader, previous, following = _load_initial_data(request)
+        reader, previous, following, starts, ends = _load_initial_data(request)
         profile_count = reader.prof_max - reader.prof_min + 1
         altitude = reader.get_data("Lidar_Data_Altitudes")
         output = _empty_output(profile_count, altitude.size)
         print(f"\tNumber of profiles to process: {profile_count}")
 
-    starts, ends = get_slice_bounds(
-        reader.prof_min,
-        reader.prof_max,
-        NB_PROF_SLICE,
-        NB_PROF_OVERLAP,
-    )
     development = {}
 
     print("\n*****Apply algorithm by slice...*****")

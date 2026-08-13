@@ -17,5 +17,9 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 
+[tool.setuptools.package-data]
+twod_mcda = ["lidar_data_altitudes.pkl"]
+
+
 [tool.setuptools.dynamic]
 version = {attr = "twod_mcda.__version__"}

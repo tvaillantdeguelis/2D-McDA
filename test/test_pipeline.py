@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from twod_mcda.io.granule_finder import get_caliop_folder
-from twod_mcda.pipeline import _legacy_config, process_granule
+from twod_mcda.pipeline import _processing_request, process_granule
 
 
 CURRENT = Path(
@@ -27,7 +27,6 @@ def config():
         "cal_lid_l1": {
             "root_directory": "/data",
             "version": "5.00",
-            "product_type": "Standard",
             "path_format": (
                 "CAL_LID_L1.v{version}/{year}/"
                 "{year}_{month:02d}_{day:02d}"
@@ -53,7 +52,7 @@ def config():
     }
 
 
-class LegacyPipelineTests(unittest.TestCase):
+class PipelineTests(unittest.TestCase):
     def test_caliop_folder_uses_configured_root_and_path_format(self):
         folder = get_caliop_folder(
             config(),
@@ -66,47 +65,47 @@ class LegacyPipelineTests(unittest.TestCase):
         )
 
     @patch("twod_mcda.pipeline.get_full_version", return_value="v2.0.0")
-    def test_legacy_config_maps_paths_and_versions(self, get_full_version):
-        legacy = _legacy_config(config(), CURRENT, PREVIOUS, NEXT)
+    def test_processing_request_maps_paths_and_versions(self, get_full_version):
+        request = _processing_request(config(), CURRENT, PREVIOUS, NEXT)
 
         self.assertEqual(
-            legacy["granule_date"],
+            request.granule_date,
             "2010-01-01T00-22-28ZN",
         )
-        self.assertEqual(legacy["cal_lid_l1_version"], "V5.00")
-        self.assertEqual(legacy["cal_lid_l1_type"], "Standard")
-        self.assertEqual(legacy["folder_path"], "/data/2010_01_01")
+        self.assertEqual(request.caliop_version, "V5.00")
+        self.assertEqual(request.current_directory, Path("/data/2010_01_01"))
         self.assertEqual(
-            legacy["previous_granule"],
+            request.previous_granule,
             "2009-12-31T23-29-53ZD",
         )
         self.assertEqual(
-            legacy["previous_folder_path"],
-            "/data/2009_12_31",
+            request.previous_directory,
+            Path("/data/2009_12_31"),
         )
         self.assertEqual(
-            legacy["next_granule"],
+            request.next_granule,
             "2010-01-01T01-15-03ZN",
         )
-        self.assertEqual(legacy["version_2d_mcda"], "V2.0.0")
-        self.assertEqual(legacy["type_2d_mcda"], "Dev")
-        self.assertEqual(legacy["slice_type"], "profindex")
-        self.assertEqual(legacy["index30m_alt_max"], 600)
+        self.assertEqual(request.output_version, "V2.0.0")
+        self.assertEqual(request.output_product_type, "Dev")
+        self.assertEqual(request.subset_mode, "profindex")
+        self.assertEqual(request.maximum_altitude_km, 30)
+        self.assertEqual(request.maximum_altitude_index, 600)
         self.assertEqual(
-            legacy["out_folder"],
-            "/output/2D_McDA.v2.0.0/2010/2010_01_01",
+            request.output_directory,
+            Path("/output/2D_McDA.v2.0.0/2010/2010_01_01"),
         )
 
     @patch("twod_mcda.pipeline.get_full_version", return_value="v2.0.0")
-    def test_legacy_config_supports_40_km(self, get_full_version):
+    def test_processing_request_supports_40_km(self, get_full_version):
         cfg = config()
         cfg["processing"]["max_altitude_km"] = 40
 
-        legacy = _legacy_config(cfg, CURRENT, PREVIOUS, NEXT)
+        request = _processing_request(cfg, CURRENT, PREVIOUS, NEXT)
 
-        self.assertIsNone(legacy["index30m_alt_max"])
+        self.assertIsNone(request.maximum_altitude_index)
 
-    def test_legacy_config_rejects_unsupported_altitude(self):
+    def test_processing_request_rejects_unsupported_altitude(self):
         cfg = config()
         cfg["processing"]["max_altitude_km"] = 35
 
@@ -114,29 +113,16 @@ class LegacyPipelineTests(unittest.TestCase):
             ValueError,
             "max_altitude_km must be either 30 or 40",
         ):
-            _legacy_config(cfg, CURRENT, PREVIOUS, NEXT)
+            _processing_request(cfg, CURRENT, PREVIOUS, NEXT)
 
-    @patch("twod_mcda.pipeline.runpy.run_module")
-    def test_legacy_engine_uses_shared_product_path(self, run_module):
-        from twod_mcda.pipeline import _run_processing
-
-        with patch("twod_mcda.pipeline.PROCESSING_IMPLEMENTATION", "legacy"):
-            _run_processing({"example": True})
-
-        run_module.assert_called_once_with(
-            "legacy.process_granule_old",
-            init_globals={"LEGACY_CONFIG": {"example": True}},
-            run_name="__main__",
-        )
-
-    @patch("twod_mcda.pipeline._run_processing")
+    @patch("twod_mcda.pipeline.run_processing")
     @patch("twod_mcda.pipeline.get_full_version", return_value="v2.0.0")
     @patch(
         "twod_mcda.pipeline.find_neighbor_granules",
         return_value=(PREVIOUS, NEXT),
     )
     @patch("twod_mcda.pipeline.find_granule_file", return_value=CURRENT)
-    def test_process_granule_invokes_refactored_implementation(
+    def test_process_granule_invokes_processor(
         self,
         find_granule_file,
         find_neighbor_granules,
@@ -146,9 +132,9 @@ class LegacyPipelineTests(unittest.TestCase):
         process_granule(config())
 
         run_processing.assert_called_once()
-        processing_config = run_processing.call_args.args[0]
+        request = run_processing.call_args.args[0]
         self.assertEqual(
-            processing_config["granule_date"],
+            request.granule_date,
             "2010-01-01T00-22-28ZN",
         )
 

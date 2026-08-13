@@ -4,6 +4,9 @@ from twod_mcda.io.calipso_reader import CALIOPRegularGridReader
 from twod_mcda.io.caliop_l1_variables import CALIOP_L1_PROCESSING_VARIABLES
 
 
+CALIOP_L1_PRODUCT_TYPE = "Standard"
+
+
 def open_caliop_reader(
     request,
     granule_date,
@@ -17,7 +20,7 @@ def open_caliop_reader(
     return CALIOPRegularGridReader(
         product="L1",
         version=request.caliop_version,
-        data_type=request.caliop_product_type,
+        data_type=CALIOP_L1_PRODUCT_TYPE,
         granule_date=granule_date,
         grid="333mx30m",
         slice_start=profile_start,

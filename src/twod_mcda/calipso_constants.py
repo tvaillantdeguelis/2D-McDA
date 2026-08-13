@@ -80,9 +80,7 @@ N_LAYERS_01KM_LAYER_PRODUCT = 10
 N_LAYERS_333M_LAYER_PRODUCT = 5
 
 LIDAR_ALTITUDES_FILE = (
-    Path(__file__).resolve().parents[1]
-    / "legacy"
-    / "lidar_data_altitudes.pkl"
+    Path(__file__).resolve().parent / "lidar_data_altitudes.pkl"
 )
 
 with LIDAR_ALTITUDES_FILE.open("rb") as file:

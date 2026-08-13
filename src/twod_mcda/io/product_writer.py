@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 from twod_mcda.calipso_constants import FILL_VALUE_FLOAT
+from twod_mcda.io.caliop_input import CALIOP_L1_PRODUCT_TYPE
 from twod_mcda.io.netcdf_writer import NetCDFVariable, write_netcdf
 
 
@@ -256,7 +257,7 @@ def _global_attributes(request, result, filename):
         "id": filename,
         "naming_authority": "org.github.tvaillantdeguelis",
         "source": (
-            f"CALIOP Level 1 {request.caliop_product_type} "
+            f"CALIOP Level 1 {CALIOP_L1_PRODUCT_TYPE} "
             f"{request.caliop_version}"
         ),
         "processing_level": "L2",

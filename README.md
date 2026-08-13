@@ -104,7 +104,6 @@ This file defines the CALIOP data location, processing options, and output direc
 cal_lid_l1:
   root_directory: "/path/to/CALIOP"
   version: "5.00"
-  product_type: "Standard"
   path_format: "CAL_LID_L1.v{version}/{year}/{year}_{month:02d}_{day:02d}"
 
 processing:
@@ -121,8 +120,10 @@ The fields have the following meanings:
 
 - `cal_lid_l1.root_directory`: root directory containing the CALIOP Level 1 archive.
 - `cal_lid_l1.version`: input product version without the leading `V`.
-- `cal_lid_l1.product_type`: product type used in filenames, normally `Standard`.
 - `cal_lid_l1.path_format`: path below the root directory. The placeholders  `version`, `year`, `month`, and `day` are filled for each granule.
+
+The CALIOP Level 1 product type is fixed to `Standard` and is not configurable.
+
 - `processing.save_development_data`: include intermediate algorithm arrays in the output netCDF file. This increases its size.
 - `processing.max_altitude_km`: maximum processed altitude. The supported values are 30 and 40 km.
 - `output.root_directory`: root directory in which result directories are created.
