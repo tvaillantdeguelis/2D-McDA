@@ -3,7 +3,7 @@
 import numpy as np
 
 
-def get_slice_bounds(
+def plan_slices(
     profile_min,
     profile_max,
     slice_size,

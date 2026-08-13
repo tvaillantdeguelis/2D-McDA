@@ -1,5 +1,6 @@
 """Read CALIOP products on the regular grid expected by 2D-McDA."""
 
+from copy import copy
 import os
 
 import numpy as np
@@ -30,41 +31,110 @@ from twod_mcda.caliop.grids import (
 MESSAGE_EXECPTION_SLICE_START_END_TYPE = '''f"Error: slice_start_end_type = '{slice_start_end_type}'" \
                                           "is not defined. Please use 'profindex' or 'longitude'\n"'''
 
-class CALIPSOReader():
-    def __init__(self, filepath):
-        """
-        Load parameters of a CALIPSO file.
-        
-        :param filepath: folderpath+filemane of file to load
-        """
-        self._data = {} # dict: (data, fillvalue)
+class CALIPSOReader:
+    """Lazy reader that keeps one HDF4 file open and caches one profile slice."""
 
-        with HDF4Reader(filepath) as data_reader:
-            # Load data with fillvalue
-            sds_keys = data_reader.get_sds_keys()
-            for sds_key in sds_keys:
-                fill_value = data_reader.get_fillvalue(sds_key)
-                if fill_value is None:
-                    try:
-                        # Get "fillvalue" attribute of CALIPSO variables (instead of "_FillValue")
-                        fill_value = data_reader._sd_interface.select(sds_key).fillvalue
-                    except AttributeError:
-                        fill_value = FILL_VALUE_FLOAT # default (hopefully it will match)
-                self._data[sds_key] = (data_reader.get_data(sds_key), fill_value)
-            # Load metadata with fillvalue
-            self._metadata_keys = data_reader.get_metadata_keys()
-            for metadata_key in self._metadata_keys:
-                fill_value = None
-                self._data[metadata_key] = (data_reader.get_metadata(metadata_key), fill_value)
-            # Get number of profiles
-            self.nb_profiles = self._data['Latitude'][0].shape[0]
-            
+    def __init__(self, filepath):
+        self.filepath = filepath
+        self._reader = HDF4Reader(filepath).__enter__()
+        self._sds = self._reader.get_sds_keys()
+        self._metadata = {
+            key: self._reader.get_metadata(key)
+            for key in self._reader.get_metadata_keys()
+        }
+        self._fill_values = {}
+        self._active_profile_bounds = None
+        self._slice_cache = {}
+        self._static_cache = {}
+        self.nb_profiles = self._sds["Latitude"][1][0]
+
+    def close(self):
+        """Close the underlying HDF4 handles."""
+
+        if self._reader is not None:
+            self._reader.__exit__(None, None, None)
+            self._reader = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
     def get_cal_keys(self):
-        return self._data.keys()
-    
+        return self._sds.keys() | self._metadata.keys()
+
     def get_fillvalue(self, key):
-        return self._data[key][1]
-        
+        if key in self._metadata:
+            return None
+        if key not in self._fill_values:
+            fill_value = self._reader.get_fillvalue(key)
+            if fill_value is None:
+                fill_value = FILL_VALUE_FLOAT
+            self._fill_values[key] = fill_value
+        return self._fill_values[key]
+
+    def _profile_axis(self, key):
+        shape = self._sds[key][1]
+        if shape[0] == self.nb_profiles:
+            return 0
+        if len(shape) > 1 and shape[1] == self.nb_profiles:
+            return 1
+        return None
+
+    def is_profile_variable(self, key):
+        """Return whether an SDS contains the granule profile dimension."""
+
+        return key in self._sds and self._profile_axis(key) is not None
+
+    @staticmethod
+    def _squeeze_non_profile_axes(data, original_shape, profile_axis):
+        axes = tuple(
+            axis
+            for axis, size in enumerate(original_shape)
+            if size == 1 and axis != profile_axis
+        )
+        if axes:
+            return data.squeeze(axis=axes)
+        return data
+
+    def _read_sds(self, key, profile_min, profile_max):
+        shape = self._sds[key][1]
+        profile_axis = self._profile_axis(key)
+
+        if profile_axis is None:
+            if key not in self._static_cache:
+                data = self._reader.get_data(key, do_squeeze=False)
+                self._static_cache[key] = self._squeeze_non_profile_axes(
+                    data,
+                    shape,
+                    None,
+                )
+            return self._static_cache[key]
+
+        bounds = (profile_min, profile_max)
+        if bounds != self._active_profile_bounds:
+            self._active_profile_bounds = bounds
+            self._slice_cache.clear()
+        if key in self._slice_cache:
+            return self._slice_cache[key]
+
+        start_index = 0 if profile_min is None else profile_min
+        end_index = self.nb_profiles - 1 if profile_max is None else profile_max
+        start = [0] * len(shape)
+        count = list(shape)
+        start[profile_axis] = start_index
+        count[profile_axis] = end_index - start_index + 1
+        data = self._reader.get_data(
+            key,
+            start=start,
+            count=count,
+            do_squeeze=False,
+        )
+        data = self._squeeze_non_profile_axes(data, shape, profile_axis)
+        self._slice_cache[key] = data
+        return data
+
     def get_data(self, key, slice_start=None, slice_end=None, slice_start_end_type='profindex',
                  do_fillvalue=True):
         """
@@ -83,48 +153,28 @@ class CALIPSOReader():
         :return: (masked) data array
         """
         
-        if key in self._data.keys():
-            data = self._data[key][0]
-            fillvalue = self._data[key][1]
-            if do_fillvalue:
-                returned_data = np.ma.masked_where(data == fillvalue, data)
-            else:
-                returned_data = data
-            if returned_data.shape[0] == self.nb_profiles:
-                # Get slice start and end
-                if slice_start_end_type == 'profindex':
-                    prof_min, prof_max = slice_start, slice_end
-                elif slice_start_end_type == 'longitude':
-                    prof_min, prof_max = get_prof_min_max_indexes_from_lon(self._data['Longitude'][0],
-                                                                           slice_start, slice_end)
-                else:
-                    raise Exception(MESSAGE_EXECPTION_SLICE_START_END_TYPE)
-                if prof_max is not None:
-                    prof_max_included = prof_max+1
-                else:
-                    prof_max_included = None
-                # Slice selected section
-                returned_data = returned_data[prof_min:prof_max_included] # works for any ndim (first is profiles)
-            
-            elif len(returned_data.shape) > 1 and returned_data.shape[1] == self.nb_profiles: # for 2D-McDA *_steps variables, profile dim is the second (=1)
-                # Get slice start and end
-                if slice_start_end_type == 'profindex':
-                    prof_min, prof_max = slice_start, slice_end
-                elif slice_start_end_type == 'longitude':
-                    prof_min, prof_max = get_prof_min_max_indexes_from_lon(self._data['Longitude'][0],
-                                                                           slice_start, slice_end)
-                else:
-                    raise Exception(MESSAGE_EXECPTION_SLICE_START_END_TYPE)
-                if prof_max is not None:
-                    prof_max_included = prof_max+1
-                else:
-                    prof_max_included = None
-                # Slice selected section
-                returned_data = returned_data[:, prof_min:prof_max_included, :] # 2D-McDA *_steps variables dims are (step, prof, alt)
-        else:
+        if key in self._metadata:
+            data = np.asanyarray(self._metadata[key])
+            return np.ma.array(data, copy=False) if do_fillvalue else data
+        if key not in self._sds:
             raise Exception(f"Error: key = '{key}' not found.\n")
 
-        return returned_data
+        if slice_start_end_type == "profindex":
+            prof_min, prof_max = slice_start, slice_end
+        elif slice_start_end_type == "longitude":
+            longitude = self.get_data("Longitude", do_fillvalue=False)
+            prof_min, prof_max = get_prof_min_max_indexes_from_lon(
+                longitude,
+                slice_start,
+                slice_end,
+            )
+        else:
+            raise Exception(MESSAGE_EXECPTION_SLICE_START_END_TYPE)
+
+        data = self._read_sds(key, prof_min, prof_max)
+        if do_fillvalue:
+            return np.ma.masked_where(data == self.get_fillvalue(key), data)
+        return data
 
 
 class CALIOPReader():
@@ -270,17 +320,17 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
             self._lat_granule_l1 = np.copy(self.lat_granule)
 
         if slice_start_end_type=='profindex':
-            if slice_start:
+            if slice_start is not None:
                 if slice_start >= 0:
                     self.prof_min = int(slice_start)
-                elif slice_start < 0:
+                else:
                     self.prof_min = self._lon_granule_l1.size + int(slice_start)
             else:
                 self.prof_min = 0
-            if slice_end:
+            if slice_end is not None:
                 self.prof_max = int(slice_end)
             else:
-                self.prof_max =  self._lat_granule_l1.size - 1
+                self.prof_max = self._lat_granule_l1.size - 1
         elif slice_start_end_type=='longitude':
             self.prof_min, self.prof_max = get_prof_min_max_indexes_from_lon(self._lon_granule_l1, slice_start,
                                                                              slice_end)
@@ -291,6 +341,36 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         self.lon_max = self._lon_granule_l1[self.prof_max]
         self.lat_max = self._lat_granule_l1[self.prof_max]
         self.nb_profiles = self.prof_max - self.prof_min + 1
+
+    def close(self):
+        """Close the underlying CALIOP file."""
+
+        self.data_reader.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+    def select_profiles(self, profile_start, profile_end):
+        """Return a lightweight slice view sharing the open HDF4 file."""
+
+        selected = copy(self)
+        selected.prof_min = int(profile_start)
+        selected.prof_max = int(profile_end)
+        selected.lon_min = selected._lon_granule_l1[selected.prof_min]
+        selected.lat_min = selected._lat_granule_l1[selected.prof_min]
+        selected.lon_max = selected._lon_granule_l1[selected.prof_max]
+        selected.lat_max = selected._lat_granule_l1[selected.prof_max]
+        selected.nb_profiles = selected.prof_max - selected.prof_min + 1
+        selected._molecular_profiles = {
+            "532": None,
+            "532par": None,
+            "532per": None,
+            "1064": None,
+        }
+        return selected
 
     def print_lat_lon_min_max(self):
         print(f"\tFrom min profile index {self.prof_min:d} "
@@ -313,12 +393,18 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         elif (key == 'Longitude') and (self.product not in PRODUCT_H_RESOLUTION['333m']):
             data = np.copy(self._lon_granule_l1)
         elif key in self.data_reader.get_cal_keys():
-            data = self.data_reader.get_data(key, None, None, 'profindex', do_fillvalue)
-            # Check if variable of profiles
-            if data.shape[0] == self.lat_granule.shape[0]:
-                var_of_profiles = True
-            else:
-                var_of_profiles = False
+            var_of_profiles = self.data_reader.is_profile_variable(key)
+            reads_native_slice = (
+                var_of_profiles
+                and self.product in PRODUCT_H_RESOLUTION['333m']
+            )
+            data = self.data_reader.get_data(
+                key,
+                self.prof_min if reads_native_slice else None,
+                self.prof_max if reads_native_slice else None,
+                'profindex',
+                do_fillvalue,
+            )
             if self.product in PRODUCT_H_RESOLUTION['333m']:
                 pass
             elif self.product in PRODUCT_H_RESOLUTION['1km']:
@@ -334,14 +420,13 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
                 raise Exception("Error: Product unknown or horizontal resolution of product unknown.")
             
             # Add zeros when nb profiles is different from L1 (at the end of the granule)
-            if var_of_profiles:
+            if var_of_profiles and not reads_native_slice:
                 nb_missing_prof = self._lat_granule_l1.shape[0] - data.shape[0] # doesn't work for VFM because _lat_granule_l1 is taken from VFM SS variables
                 if nb_missing_prof > 0:
                     data = add_zeros_where_missing_profiles(data, nb_missing_prof)
-                
-            # Slice selected section
-            if var_of_profiles:
-                data = data[self.prof_min:self.prof_max+1] # works for any ndim (first is profiles)
+
+            if var_of_profiles and not reads_native_slice:
+                data = data[self.prof_min:self.prof_max + 1]
 
             # If layer variable then convert to grid
             try:

@@ -5,7 +5,7 @@ from twod_mcda.caliop.constants import CALIOP_L1_PRODUCT_TYPE
 from twod_mcda.caliop.variables import CALIOP_L1_PROCESSING_VARIABLES
 
 
-def open_caliop_reader(
+def open_granule(
     request,
     granule_date,
     directory,
@@ -13,7 +13,7 @@ def open_caliop_reader(
     profile_end=None,
     subset_mode="profindex",
 ):
-    """Create the native-grid reader used by the current algorithm."""
+    """Open one CALIOP granule without loading its scientific arrays."""
 
     return CALIOPRegularGridReader(
         product="L1",
@@ -29,9 +29,10 @@ def open_caliop_reader(
     )
 
 
-def load_processing_variables(reader):
-    """Read native and derived arrays required by the detectors."""
+def read_slice(granule, profile_start, profile_end):
+    """Read and derive the detector inputs for one profile slice."""
 
+    reader = granule.select_profiles(profile_start, profile_end)
     return {
         variable: reader.get_data(variable)
         for variable in CALIOP_L1_PROCESSING_VARIABLES

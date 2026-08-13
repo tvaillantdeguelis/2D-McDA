@@ -4,18 +4,8 @@
 
 ### Changed
 
-- Reorganized the package into algorithm, CALIOP adapter, workflow, output,
-  and utility layers.
-- Split feature filtering, attenuation correction, CALIOP grid conversion,
-  and derived-variable computation into focused modules.
-- Replaced HDF4 product output with compressed netCDF-4 output and CF 1.13 metadata.
-- Simplified the pipeline to invoke the current processing implementation directly.
-
-### Removed
-
-- Removed the unused experimental xarray reader and orphaned model modules.
-- Removed the output format setting and the obsolete HDF4 writers.
-- Removed the legacy and archived processing implementations.
+- Reorganized the package.
+- Replaced HDF4 product output with compressed netCDF-4 output and CF metadata.
 
 ## [1.1.10] - 2026-08-10
 

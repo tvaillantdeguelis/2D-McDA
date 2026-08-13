@@ -35,6 +35,7 @@ class PackageArchitectureTests(unittest.TestCase):
             "calipso_calculator.py",
             "calipso_constants.py",
             "config.py",
+            "workflow/processor.py",
         ):
             self.assertFalse((PACKAGE_ROOT / path).exists(), path)
 

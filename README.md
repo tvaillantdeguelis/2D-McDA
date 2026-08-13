@@ -4,24 +4,6 @@ Two-dimensional and multi-channel detection algorithm for the CALIPSO/CALIOP lid
 
 2D-McDA processes CALIOP Level 1 attenuated-backscatter profiles and produces two-dimensional feature-detection masks from the 532 nm parallel, 532 nm perpendicular, and 1064 nm channels.
 
-## Source-code organization
-
-The package is divided by responsibility:
-
-```text
-twod_mcda/
-├── algorithm/   # scientific detection, filtering and mask combination
-├── caliop/      # HDF4 access, CALIOP conventions and grid transformations
-├── workflow/    # granule, neighbor and slice orchestration
-├── output/      # netCDF schema and serialization
-├── utils/       # cross-cutting utilities
-└── pipeline.py  # public processing entry point
-```
-
-The scientific algorithm operates on NumPy arrays and masked arrays. CALIOP
-file access is confined to `caliop`, while `output` is responsible only for
-turning processing results into the final netCDF product.
-
 ## 1. Input and output data
 
 ### 1.1 Input
@@ -39,6 +21,12 @@ Files must be stored below the directory configured by `cal_lid_l1.root_director
 ```
 
 For each requested granule, the pipeline also looks for the preceding and following granules. They provide the neighboring profiles required to process the edges of the current granule continuously. The search includes the previous and next calendar days to handle granules close to midnight.
+
+Scientific arrays are read directly from HDF4 one profile slice at a time.
+Only the latitude and longitude coordinates needed to plan the run, the active
+slice, and the 500-profile edge regions of any required neighboring granules
+are retained as inputs. Complete detection masks are assembled in memory for
+the final netCDF write.
 
 ### 1.2 Output
 
