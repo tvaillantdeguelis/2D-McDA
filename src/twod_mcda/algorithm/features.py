@@ -208,8 +208,6 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
         with timer("Apply a gaussian horizontal line window averaging"):
             step += 1
-            # sr_dict[step], sr_sigma = gaussian_line_window(a[0], a[1], sr_dict[last_sr],
-            #                                                feature_dict[last_feature], sr_sigma)
             sr_dict[step], sr_sigma = gaussian_2d_window(a[0], a[1], sr_dict[last_sr],
                                                         feature_dict[last_feature], sr_sigma)
             last_sr = step
