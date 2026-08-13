@@ -11,6 +11,5 @@ dependencies:
   - matplotlib
   - pyhdf
   - netcdf4
-  - xarray
   - pyyaml
   - pip

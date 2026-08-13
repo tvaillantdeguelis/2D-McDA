@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from twod_mcda.io.granule_finder import get_caliop_folder
+from twod_mcda.caliop.discovery import get_caliop_folder
 from twod_mcda.pipeline import _processing_request, process_granule
 
 

@@ -5,9 +5,9 @@ from pathlib import Path
 import re
 import time
 
-from .io.granule_finder import find_granule_file, find_neighbor_granules
-from .processing.granule_processor import process_granule as run_processing
-from .processing.models import ProcessingRequest
+from .caliop.discovery import find_granule_file, find_neighbor_granules
+from .workflow.processor import process_granule as run_processing
+from .workflow.models import ProcessingRequest
 from .version import get_full_version
 
 

@@ -1,0 +1,10 @@
+"""Pixel values used in channel-specific detection masks."""
+
+FLAG_NOTHING = 0
+FLAG_DETECTION_LEVEL = 1
+FLAG_MAYBE = 255
+FLAG_SURFACE = 254
+FLAG_LIKELY_ARTIFACT = 253
+FLAG_FA = 252
+FLAG_AFA = 251
+FLAG_SMALL_STRIPS = 250
