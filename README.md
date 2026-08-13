@@ -144,6 +144,7 @@ include: common.yaml
 granule: "2010-01-18T00-19-57ZN"
 
 subset:
+  activate: true
   mode: "profindex"
   start: 4000
   end: 5000
@@ -151,8 +152,9 @@ subset:
 
 - `include` loads the common settings from a file in the same directory.
 - `granule` is the timestamp identifying the CALIOP file.
+- `subset.activate`: set to `false` to process the complete granule. The complete granule is also processed when the `subset` block is absent. When the block is present and `activate` is omitted, it defaults to `true` for backward compatibility.
 - `subset.mode` can be `profindex` or `longitude`.
-- For `profindex`, `start` and `end` are zero-based profile indexes and both bounds are included. Use `start: 0` and `end: null` for the complete granule.
+- For `profindex`, `start` and `end` are zero-based profile indexes and both bounds are included. Use `end: null` to extend an active subset to the last profile.
 - For `longitude`, `start` and `end` are longitude bounds in degrees. Their order must follow the direction of the satellite track.
 
 ### 3.3 Period settings: `config/period.yaml`

@@ -1,13 +1,18 @@
+from contextlib import redirect_stdout
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from twod_mcda.caliop.discovery import get_caliop_folder
 from twod_mcda.pipeline import (
+    _print_request,
     resolve_processing_request,
     run_granule_pipeline,
 )
+from twod_mcda.utils.timing import timer
 
 
 CURRENT = Path(
@@ -56,6 +61,50 @@ def config():
 
 
 class PipelineTests(unittest.TestCase):
+    def test_timer_uses_four_spaces_for_nested_levels(self):
+        output = StringIO()
+
+        with redirect_stdout(output):
+            with timer("outer"):
+                with timer("inner"):
+                    pass
+
+        self.assertIn("outer...\n    inner...", output.getvalue())
+        self.assertNotIn("\tinner", output.getvalue())
+
+    def test_print_request_displays_resolved_profile_limits(self):
+        request = SimpleNamespace(
+            output_version="V2.0.0",
+            caliop_version="V5.00",
+            save_development_data=False,
+            maximum_altitude_km=30,
+            subset_active=True,
+            subset_mode="profindex",
+            subset_start=0,
+            subset_end=None,
+            previous_granule=None,
+            next_granule=None,
+        )
+        granule = SimpleNamespace(
+            filepath="/data/current.hdf",
+            prof_min=0,
+            prof_max=9999,
+        )
+
+        output = StringIO()
+        with redirect_stdout(output):
+            _print_request(request, granule, None, None, 10000, 2)
+
+        self.assertIn("Profile limits         : 0 -> 9999", output.getvalue())
+
+        request.subset_active = False
+        output = StringIO()
+        with redirect_stdout(output):
+            _print_request(request, granule, None, None, 10000, 2)
+
+        self.assertIn("Subset mode            : false", output.getvalue())
+        self.assertNotIn("limits", output.getvalue())
+
     def test_caliop_folder_uses_configured_root_and_path_format(self):
         folder = get_caliop_folder(
             config(),
@@ -98,6 +147,7 @@ class PipelineTests(unittest.TestCase):
         )
         self.assertEqual(request.output_version, "V2.0.0")
         self.assertEqual(request.output_product_type, "Dev")
+        self.assertTrue(request.subset_active)
         self.assertEqual(request.subset_mode, "profindex")
         self.assertEqual(request.maximum_altitude_km, 30)
         self.assertEqual(request.maximum_altitude_index, 600)
@@ -105,6 +155,39 @@ class PipelineTests(unittest.TestCase):
             request.output_directory,
             Path("/output/2D_McDA.v2.0.0/2010/2010_01_01"),
         )
+
+    @patch("twod_mcda.pipeline.find_neighbor_granules", return_value=(PREVIOUS, NEXT))
+    @patch("twod_mcda.pipeline.find_granule_file", return_value=CURRENT)
+    @patch("twod_mcda.pipeline.get_full_version", return_value="v2.0.0")
+    def test_processing_request_disables_absent_or_inactive_subset(
+        self,
+        get_full_version,
+        find_granule_file,
+        find_neighbor_granules,
+    ):
+        configurations = []
+
+        without_subset = config()
+        without_subset.pop("subset")
+        configurations.append(without_subset)
+
+        inactive_subset = config()
+        inactive_subset["subset"] = {
+            "activate": False,
+            "mode": "longitude",
+            "start": 63.2,
+            "end": 61.3,
+        }
+        configurations.append(inactive_subset)
+
+        for cfg in configurations:
+            with self.subTest(subset=cfg.get("subset")):
+                request = resolve_processing_request(cfg)
+
+                self.assertFalse(request.subset_active)
+                self.assertEqual(request.subset_mode, "profindex")
+                self.assertIsNone(request.subset_start)
+                self.assertIsNone(request.subset_end)
 
     @patch("twod_mcda.pipeline.find_neighbor_granules", return_value=(PREVIOUS, NEXT))
     @patch("twod_mcda.pipeline.find_granule_file", return_value=CURRENT)

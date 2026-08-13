@@ -2,6 +2,7 @@
 
 import numpy as np
 from numba import jit
+from scipy.ndimage import convolve1d
 
 from twod_mcda.algorithm.flags import (
     FLAG_AFA,
@@ -577,82 +578,87 @@ def gaussian_line_window(width_window, gauss_sigma, sr, feature, sr_sigma):
     return new_sr, sr_sigma
 
 
-@jit(nopython=True)
-def gaussian_2d_window_jit(nb_prof, nb_alt, ab_signal, new_ab, gaussian_2d, h_nside, v_nside, fill_value, feature):
-    """Part extracted from gaussian_line_window function for faster processing 
-    with @jit"""
-
-    # Loop on profiles
-    for i in np.arange(nb_prof):
-        # From bottom go up
-        for j in np.arange(nb_alt):
-            # Apply 2-D gaussian sliding window
-            if ab_signal[i, j] != fill_value:
-                # Averaging (if not at an edge of the image)
-                if not (i < h_nside) | (i > nb_prof - (h_nside+1)) | (j < v_nside) | (j > nb_alt - (v_nside+1)):
-                    window = ab_signal[i-h_nside:i+(h_nside+1), j-v_nside:j+(v_nside+1)]
-                    gaussian_2d_vector_without_fillvalues = np.array(())
-                    window_vector_without_fillvalues = np.array(())
-                    for i_window in np.arange(window.shape[0]):
-                        for j_window in np.arange(window.shape[1]):
-                            if window[i_window, j_window] != fill_value:
-                                gaussian_2d_vector_without_fillvalues = np.append(gaussian_2d_vector_without_fillvalues, gaussian_2d[i_window, j_window])
-                                window_vector_without_fillvalues = np.append(window_vector_without_fillvalues, window[i_window, j_window])
-                    new_ab[i, j] = np.sum(window_vector_without_fillvalues*gaussian_2d_vector_without_fillvalues)/np.sum(gaussian_2d_vector_without_fillvalues)
-            # Also apply window where special flags (FA, AFA, likely artifact, no confidence, and spikes)
-            elif (feature[i,j] == FLAG_FA) |\
-                 (feature[i,j] == FLAG_AFA) |\
-                 (feature[i,j] == FLAG_LIKELY_ARTIFACT) |\
-                 (feature[i,j] == FLAG_SMALL_STRIPS):
-                if not (i < h_nside) | (i > nb_prof - (h_nside+1)) | (j < v_nside) | (j > nb_alt - (v_nside+1)):
-                    window = ab_signal[i-h_nside:i+(h_nside+1), j-v_nside:j+(v_nside+1)]
-                    no_special_flag = window != fill_value
-                    nb_no_special_flag = np.sum(no_special_flag)
-                    if nb_no_special_flag != 0: # if not all FA or AFA
-                        gaussian_2d_vector_without_fillvalues = np.array(())
-                        window_vector_without_fillvalues = np.array(())
-                        for i_window in np.arange(window.shape[0]):
-                            for j_window in np.arange(window.shape[1]):
-                                if window[i_window, j_window] != fill_value:
-                                    gaussian_2d_vector_without_fillvalues = np.append(gaussian_2d_vector_without_fillvalues, gaussian_2d[i_window, j_window])
-                                    window_vector_without_fillvalues = np.append(window_vector_without_fillvalues, window[i_window, j_window])
-                        new_ab[i, j] = np.sum(window_vector_without_fillvalues*gaussian_2d_vector_without_fillvalues)/np.sum(gaussian_2d_vector_without_fillvalues)
-
-    return new_ab
-
-
-def gaussian_2d_window(width_window, horizontal_gauss_sigma, ab_signal, feature, ab_sigma, height_window=7, vertical_gauss_sigma=3):
+def gaussian_2d_window(
+    width_window,
+    horizontal_gauss_sigma,
+    ab_signal,
+    feature,
+    ab_sigma,
+    height_window=7,
+    vertical_gauss_sigma=3,
+):
     """Apply a 2-D gaussian averaging window to the AB signal"""
 
     # Initialization
-    nb_prof = ab_signal.shape[0]
-    nb_alt = ab_signal.shape[1]
-    ab2 = np.ma.copy(ab_signal)
-    # ab2 = np.ma.masked_where(feature != FLAG_NOTHING, ab_signal) # mask where not "nothing"
-    ab2 = ab2.filled(FILL_VALUE_FLOAT) # fill mask value to use jit
-    new_ab = np.ma.ones(ab_signal.shape)*FILL_VALUE_FLOAT
-    new_ab = new_ab.filled(FILL_VALUE_FLOAT)
-    copy_feature = np.ma.copy(feature)  
+    ab2 = np.ma.asarray(ab_signal).filled(FILL_VALUE_FLOAT).astype(float, copy=False)
+    new_ab = np.full(ab_signal.shape, FILL_VALUE_FLOAT, dtype=float)
     copy_feature = np.ma.asarray(feature).filled(FLAG_SURFACE)
 
     # width_window should be odd numbers
-    if width_window%2 != 1:
+    if width_window % 2 != 1:
         raise ValueError(f"width_window (= {width_window}) should be odd")
 
     # Apply gaussian 2-D averaging
-    h_nside = np.int64((width_window-1)/2)
+    h_nside = np.int64((width_window - 1) / 2)
     x = np.arange(width_window) - h_nside
-    v_nside = np.int64((height_window-1)/2)
+    v_nside = np.int64((height_window - 1) / 2)
     y = np.arange(height_window) - v_nside
-    gaussian_2d = np.outer(np.exp(-x**2/(2*horizontal_gauss_sigma**2)), np.exp(-y**2/(2*vertical_gauss_sigma**2))) # np.outer: matrix from product of two vectors
-    nb_prof_averaged = np.sum(gaussian_2d)
-    new_ab = gaussian_2d_window_jit(nb_prof, nb_alt, ab2, new_ab, gaussian_2d, h_nside, v_nside, FILL_VALUE_FLOAT, copy_feature)
-    
-    # Mask where FILL_VALUE_FLOAT
-    new_ab = np.ma.masked_where(new_ab==FILL_VALUE_FLOAT, new_ab)
-    ab2 = np.ma.masked_where(ab2==FILL_VALUE_FLOAT, ab2)
+    horizontal_gaussian = np.exp(-x**2 / (2 * horizontal_gauss_sigma**2))
+    vertical_gaussian = np.exp(-y**2 / (2 * vertical_gauss_sigma**2))
+    nb_prof_averaged = np.sum(np.outer(horizontal_gaussian, vertical_gaussian))
 
+    # Normalize by the locally available Gaussian weights so masked samples do
+    # not reduce the average. The 2-D Gaussian is separable, hence two 1-D
+    # convolutions give the same result at a much lower cost.
+    valid = ab2 != FILL_VALUE_FLOAT
+    weighted_signal = np.where(valid, ab2, 0.0)
+    numerator = convolve1d(
+        weighted_signal,
+        horizontal_gaussian,
+        axis=0,
+        mode="constant",
+        cval=0.0,
+    )
+    numerator = convolve1d(
+        numerator,
+        vertical_gaussian,
+        axis=1,
+        mode="constant",
+        cval=0.0,
+    )
+    denominator = convolve1d(
+        valid.astype(float),
+        horizontal_gaussian,
+        axis=0,
+        mode="constant",
+        cval=0.0,
+    )
+    denominator = convolve1d(
+        denominator,
+        vertical_gaussian,
+        axis=1,
+        mode="constant",
+        cval=0.0,
+    )
+
+    special = (
+        (copy_feature == FLAG_FA)
+        | (copy_feature == FLAG_AFA)
+        | (copy_feature == FLAG_LIKELY_ARTIFACT)
+        | (copy_feature == FLAG_SMALL_STRIPS)
+    )
+    eligible = (valid | special) & (denominator != 0)
+    if h_nside:
+        eligible[:h_nside, :] = False
+        eligible[-h_nside:, :] = False
+    if v_nside:
+        eligible[:, :v_nside] = False
+        eligible[:, -v_nside:] = False
+    np.divide(numerator, denominator, out=new_ab, where=eligible)
+
+    # Mask where FILL_VALUE_FLOAT
+    new_ab = np.ma.masked_where(new_ab == FILL_VALUE_FLOAT, new_ab)
     # Adapt SR threshold
-    ab_sigma = ab_sigma/np.sqrt(nb_prof_averaged)
+    ab_sigma = ab_sigma / np.sqrt(nb_prof_averaged)
 
     return new_ab, ab_sigma

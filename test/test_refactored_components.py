@@ -1,6 +1,4 @@
-from contextlib import redirect_stdout
 from dataclasses import replace
-from io import StringIO
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -30,6 +28,7 @@ def request():
         previous_directory=None,
         next_granule=None,
         next_directory=None,
+        subset_active=True,
         subset_mode="profindex",
         subset_start=0,
         subset_end=None,
@@ -74,7 +73,7 @@ class RefactoredComponentTests(unittest.TestCase):
         reader.close()
 
     @patch("twod_mcda.pipeline.open_granule")
-    def test_interior_subset_does_not_load_or_display_neighbors(self, open_granule):
+    def test_interior_subset_does_not_load_neighbors(self, open_granule):
         current_reader = SimpleNamespace(
             filepath="/data/current.hdf",
             prof_min=4000,
@@ -92,18 +91,16 @@ class RefactoredComponentTests(unittest.TestCase):
             subset_end=5000,
         )
 
-        output = StringIO()
-        with redirect_stdout(output):
-            _open_inputs(processing_request, stack)
+        result = _open_inputs(processing_request, stack)
 
         open_granule.assert_called_once()
-        self.assertIn("Current  : /data/current.hdf", output.getvalue())
-        self.assertNotIn("Previous :", output.getvalue())
-        self.assertNotIn("Next     :", output.getvalue())
+        self.assertIs(result[0], current_reader)
+        self.assertIsNone(result[1])
+        self.assertIsNone(result[2])
 
     @patch("twod_mcda.pipeline.read_slice", return_value={})
     @patch("twod_mcda.pipeline.open_granule")
-    def test_full_granule_loads_and_displays_both_neighbors(
+    def test_full_granule_loads_and_returns_both_neighbors(
         self,
         open_granule,
         read_slice,
@@ -133,15 +130,13 @@ class RefactoredComponentTests(unittest.TestCase):
             next_granule="next",
         )
 
-        output = StringIO()
-        with redirect_stdout(output):
-            _open_inputs(processing_request, stack)
+        result = _open_inputs(processing_request, stack)
 
         self.assertEqual(open_granule.call_count, 3)
         self.assertEqual(read_slice.call_count, 2)
-        self.assertIn("Previous : /data/previous.hdf", output.getvalue())
-        self.assertIn("Current  : /data/current.hdf", output.getvalue())
-        self.assertIn("Next     : /data/next.hdf", output.getvalue())
+        self.assertIs(result[0], current_reader)
+        self.assertIs(result[1], previous_reader)
+        self.assertIs(result[2], next_reader)
 
     def test_append_adjacent_profiles_keeps_altitude_unchanged(self):
         current = {
@@ -225,6 +220,25 @@ class RefactoredComponentTests(unittest.TestCase):
         )
         self.assertEqual(
             output_filename(request(), result),
+            "CAL_LID_L2_2D_McDA-Dev-V2-0-0."
+            "2010-01-01T00-22-28ZN.nc",
+        )
+        self.assertEqual(
+            output_filename(replace(request(), subset_start=None), result),
+            "CAL_LID_L2_2D_McDA-Dev-V2-0-0."
+            "2010-01-01T00-22-28ZN.nc",
+        )
+        self.assertEqual(
+            output_filename(
+                replace(
+                    request(),
+                    subset_active=False,
+                    subset_mode="longitude",
+                    subset_start=63.2,
+                    subset_end=61.3,
+                ),
+                result,
+            ),
             "CAL_LID_L2_2D_McDA-Dev-V2-0-0."
             "2010-01-01T00-22-28ZN.nc",
         )

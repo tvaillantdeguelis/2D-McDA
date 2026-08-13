@@ -210,9 +210,12 @@ def output_filename(request, result):
     """Return the netCDF product filename."""
 
     whole_file = (
-        request.subset_start == 0
-        and request.subset_end is None
-        and request.subset_mode == "profindex"
+        not request.subset_active
+        or (
+            request.subset_start in (None, 0)
+            and request.subset_end is None
+            and request.subset_mode == "profindex"
+        )
     )
     suffix = "" if whole_file else (
         f"_lon_{result.longitude_min:.2f}_{result.longitude_max:.2f}"

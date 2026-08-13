@@ -20,6 +20,7 @@ class ProcessingRequest:
     previous_directory: Path | None
     next_granule: str | None
     next_directory: Path | None
+    subset_active: bool
     subset_mode: str
     subset_start: int | float | None
     subset_end: int | float | None

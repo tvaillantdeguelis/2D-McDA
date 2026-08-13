@@ -3,6 +3,8 @@ include: common.yaml
 granule: "2018-08-31T21-33-53ZN"
 
 subset:
+  activate: true              # false processes the whole granule
   mode: "longitude"           # "profindex" or "longitude"
+  # With "profindex", end: null extends the subset to the last profile.
   start: 63.2
   end: 61.3

@@ -170,81 +170,98 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
                    caliop_lidar_tilt, channel):
     """Detect surface using the attenuated backscatter signal in lidar channel"""
 
-    # Print channel
-    print(f"\n\t***{channel}***")
-    
     # Get surface detection parameters
     params = SurfaceDetectionParameters(channel)
 
-
-    ###########################################################
-    #### Test if DEM estimated surface altitude is correct ####
-    print("\t=> Test if DEM estimated surface altitude is correct...")
     with timer("Test if DEM estimated surface altitude is correct"):
         for i in np.arange(est_surf_alt.size):
             if (est_surf_alt[i] < np.min(alt)) | (est_surf_alt[i] > np.max(alt)):
                 raise Exception(f"DEM surface_elevation[{i}] = {est_surf_alt[i]:.3f} looks uncorrect")
 
-
-    ################################################
-    #### Compute RMS in beta' domain at surface ####
-    print("\t=> Compute RMS in beta' domain at surface...")
     with timer("Compute RMS in beta' domain at surface"):
         r_surf = range_from_altitude(alt_sat, est_surf_alt, caliop_lidar_tilt)
         rms_betap_surf = rms_from_P_domain_to_betap_domain(rms, r_surf, energy, gain, calib, pgr)
     
-
-    #########################################################
-    #### Compute bin index of estimated surface altitude ####
-    print("\t=> Compute bin index of estimated surface altitude...")
     with timer("Compute bin index of estimated surface altitude"):
         est_surf_alt_index = np.argmin(np.abs(alt - est_surf_alt[:, np.newaxis]), axis=1)
 
-
-    ######################################
-    #### Define surface search region ####
-    print("\t=> Define surface search region...")
     with timer("Define surface search region"):
         min_index_search_region, max_index_search_region =\
             surf_search_region(surf_type, est_surf_alt, est_surf_alt_index, alt, params)
 
-
-    #############################
-    #### Compute derivatives ####
-    print("\t=> Compute derivatives...")
     with timer("Compute derivatives"):
         deriv = compute_deriv(ab, alt)
 
-
-    ##########################################
-    #### Get min and max in search region ####
-    print("\t=> Get min and max in search region...")
     with timer("Get min and max in search region"):
         i_min, i_max, alt_min, alt_max = get_min_max_deriv(deriv, alt, min_index_search_region,
-                                                        max_index_search_region)
+                                                          max_index_search_region)
 
-
-    ######################################
-    #### Get maximum signal magnitude ####
-    print("\t=> Get maximum signal magnitude...")
     with timer("Get maximum signal magnitude"):
         ab_max, ab_argmax = get_max_ab_signal(ab, i_min, i_max)
 
-
-    ###########################
-    #### Surface detection ####
-    print("\t=> Surface detection...")
     with timer("Surface detection"):
         i_surf, alt_surf = apply_surf_detection_rules(i_min, i_max, alt_min, alt_max, ab_max,
-                                                    ab_argmax, params, rms_betap_surf, ab, deriv,
-                                                    alt, channel)
+                                                      ab_argmax, params, rms_betap_surf, ab, deriv,
+                                                      alt, channel)
 
-    
-    ################################
-    #### Remove false positives ####
-    print("\t=> Remove false positives...")
     with timer("Remove false positives"):
         i_surf, alt_surf = remove_false_pos(i_surf, alt_surf, params, est_surf_alt_index)
 
 
     return i_surf
+
+
+def detect_surface_in_3_channels(data):
+    """Return surface indexes for the three lidar channels."""
+
+    common = (
+        data["IGBP_Surface_Type"],
+        data["Surface_Elevation"],
+        data["Spacecraft_Altitude"],
+        data["Lidar_Data_Altitudes"],
+    )
+
+    with timer("Surface detection at 532_par"):
+        parallel = detect_surface(
+            data["Parallel_Attenuated_Backscatter_532"],
+            *common,
+            data["Parallel_RMS_Baseline_532"],
+            data["Laser_Energy_532"],
+            data["Calibration_Constant_532"],
+            1,
+            data["Parallel_Amplifier_Gain_532"],
+            data["Off_Nadir_Angle"],
+            "532_par",
+        )
+
+    with timer("Surface detection at 532_per"):
+        perpendicular = detect_surface(
+            data["Perpendicular_Attenuated_Backscatter_532"],
+            *common,
+            data["Perpendicular_RMS_Baseline_532"],
+            data["Laser_Energy_532"],
+            data["Calibration_Constant_532"],
+            data["Depolarization_Gain_Ratio_532"],
+            data["Perpendicular_Amplifier_Gain_532"],
+            data["Off_Nadir_Angle"],
+            "532_per",
+        )
+
+    with timer("Surface detection at 1064"):
+        infrared = detect_surface(
+            data["Attenuated_Backscatter_1064"],
+            *common,
+            data["RMS_Baseline_1064"],
+            data["Laser_Energy_1064"],
+            data["Calibration_Constant_1064"],
+            1,
+            data["Amplifier_Gain_1064"],
+            data["Off_Nadir_Angle"],
+            "1064",
+        )
+
+    return {
+        "532_par": parallel,
+        "532_per": perpendicular,
+        "1064": infrared,
+    }

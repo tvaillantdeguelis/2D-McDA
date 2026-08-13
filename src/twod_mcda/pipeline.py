@@ -104,7 +104,11 @@ def resolve_processing_request(cfg):
 
     processing_cfg = cfg.get("processing", {})
     output_cfg = cfg["output"]
-    subset_cfg = cfg.get("subset", {})
+    subset_cfg = cfg.get("subset")
+    subset_active = (
+        subset_cfg is not None
+        and subset_cfg.get("activate", True)
+    )
     caliop_cfg = cfg["cal_lid_l1"]
     version = _normalized_version(get_full_version())
     granule_date = _granule_id(current_file)
@@ -125,9 +129,13 @@ def resolve_processing_request(cfg):
         next_directory=(
             Path(next_file).parent if next_file is not None else None
         ),
-        subset_mode=subset_cfg.get("mode", "profindex"),
-        subset_start=subset_cfg.get("start"),
-        subset_end=subset_cfg.get("end"),
+        subset_active=subset_active,
+        subset_mode=(
+            subset_cfg.get("mode", "profindex")
+            if subset_active else "profindex"
+        ),
+        subset_start=(subset_cfg.get("start") if subset_active else None),
+        subset_end=(subset_cfg.get("end") if subset_active else None),
         save_development_data=processing_cfg.get(
             "save_development_data", False
         ),
@@ -141,22 +149,55 @@ def resolve_processing_request(cfg):
     )
 
 
-def _print_request(request, granule, previous_granule, next_granule):
+def _print_request(request, granule, previous_granule, next_granule, profile_count, nb_slices):
     """Print only the input and processing settings useful to the user."""
 
-    print("\n*****2D-McDA configuration*****")
+    if request.subset_active and request.subset_mode == "profindex":
+        subset_start = granule.prof_min
+        subset_end = granule.prof_max
+        subset_limits_label = "Profile limits"
+    elif request.subset_active:
+        subset_start = request.subset_start
+        subset_end = request.subset_end
+        subset_limits_label = "Longitude limits"
+
+    print("\n################# Configuration #################")
     print(f"2D-McDA version        : {request.output_version}")
     print(f"CALIOP L1 version      : {request.caliop_version}")
-    print(f"Save development data : {request.save_development_data}")
+    print(f"Save development data  : {request.save_development_data}")
     print(f"Maximum altitude       : {request.maximum_altitude_km} km")
-    print(f"Subset mode            : {request.subset_mode}")
-    print(f"Subset limits          : {request.subset_start} -> {request.subset_end}")
-    print("Granules:")
-    if previous_granule is not None:
-        print(f"  Previous : {previous_granule.filepath}")
-    print(f"  Current  : {granule.filepath}")
-    if next_granule is not None:
-        print(f"  Next     : {next_granule.filepath}")
+    if request.subset_active:
+        print(f"Subset mode            : {request.subset_mode}")
+        print(f"{subset_limits_label:<23}: {subset_start} -> {subset_end}")
+    else:
+        print("Subset mode            : false")
+    print("#################################################")
+
+    print(f"\n=> Current L1 file to process :\n{granule.filepath}")
+
+    if request.previous_granule is None:
+        print(
+            f"\n=> Previous L1 file: Not found. The algorithm will run without it and this may introduce artifacts in the first {NB_PROF_OVERLAP} profiles."
+        )
+    elif previous_granule is None:
+        pass
+    else:
+        print(
+            f"\n=> Previous L1 file (used to provide {NB_PROF_OVERLAP} overlapping profiles at the start):\n{previous_granule.filepath}"
+        )
+
+    if request.next_granule is None:
+        print(
+            f"\n=> Next L1 file: Not found. The algorithm will run without it and this may introduce artifacts in the last {NB_PROF_OVERLAP} profiles."
+        )
+    elif next_granule is None:
+        pass
+    else:
+        print(
+            f"\n=> Next L1 file (used to provide {NB_PROF_OVERLAP} overlapping profiles at the end):\n{next_granule.filepath}"
+        )
+
+    print(f"\nNumber of profiles to process: {profile_count} in {nb_slices} slices\n")
 
 
 def _open_inputs(request, stack):
@@ -216,8 +257,15 @@ def _open_inputs(request, stack):
             next_granule.prof_max,
         )
 
-    _print_request(request, granule, previous_granule, next_granule)
-    return granule, previous, following, starts, ends
+    return (
+        granule,
+        previous_granule,
+        next_granule,
+        previous,
+        following,
+        starts,
+        ends,
+    )
 
 
 def _empty_output(profile_count, altitude_count):
@@ -365,55 +413,56 @@ def assemble_results(output, development, altitude, granule):
 
 def _execute_pipeline(request):
     with ExitStack() as stack:
-        print("\n*****CALIOP L1 data...*****")
-        with timer("CALIOP L1 data"):
-            granule, previous, following, starts, ends = _open_inputs(
-                request,
-                stack,
-            )
-            profile_count = granule.prof_max - granule.prof_min + 1
-            altitude = granule.get_data("Lidar_Data_Altitudes")
-            output = _empty_output(profile_count, altitude.size)
-            print(f"\tNumber of profiles to process: {profile_count}")
+        (
+            granule,
+            previous_granule,
+            next_granule,
+            previous,
+            following,
+            starts,
+            ends,
+        ) = _open_inputs(request, stack)
+        profile_count = granule.prof_max - granule.prof_min + 1
+        nb_slices = starts.size
+        altitude = granule.get_data("Lidar_Data_Altitudes")
+        output = _empty_output(profile_count, altitude.size)
+
+        _print_request(request, granule, previous_granule, next_granule, profile_count, nb_slices)
 
         development = {}
-        print("\n*****Apply algorithm by slice...*****")
-        with timer("Apply algorithm by slice"):
-            for index, (profile_min, profile_max) in enumerate(
-                zip(starts, ends),
-                start=1,
-            ):
-                with timer(f"Process slice {index:d}/{starts.size:d}"):
-                    print(f"\n\n*****Slice {index:d}/{starts.size:d}...*****")
-                    print("\n\n*****Load slice data...*****")
-                    with timer("Load slice data"):
-                        slice_data = _read_processing_slice(
-                            profile_min,
-                            profile_max,
-                            granule,
-                            previous,
-                            following,
-                        )
-                    slice_data = process_slice(slice_data)
-                    if request.save_development_data:
-                        _store_development(
-                            development,
-                            slice_data.development,
-                            profile_min,
-                            profile_max,
-                            granule.prof_min,
-                            profile_count,
-                        )
+        for index, (profile_min, profile_max) in enumerate(
+            zip(starts, ends),
+            start=1,
+        ):
+            with timer(f"Process slice {index:d}/{starts.size:d} (profiles {profile_min:d} to {profile_max:d})"):
+                with timer("Load slice data"):
+                    slice_data = _read_processing_slice(
+                        profile_min,
+                        profile_max,
+                        granule,
+                        previous,
+                        following,
+                    )
+                slice_data = process_slice(slice_data)
+                if request.save_development_data:
+                    _store_development(
+                        development,
+                        slice_data.development,
+                        profile_min,
+                        profile_max,
+                        granule.prof_min,
+                        profile_count,
+                    )
 
-                    print("\n\n*****Copy slice data to the whole data arrays...*****")
-                    with timer("Copy slice data to the whole data arrays"):
-                        _store_slice(
-                            output,
-                            slice_data,
-                            profile_min,
-                            profile_max,
-                            granule.prof_min,
-                        )
+                print("\n\n*****Copy slice data to the whole data arrays...*****")
+                with timer("Copy slice data to the whole data arrays"):
+                    _store_slice(
+                        output,
+                        slice_data,
+                        profile_min,
+                        profile_max,
+                        granule.prof_min,
+                    )
 
         result = assemble_results(output, development, altitude, granule)
 
@@ -427,7 +476,7 @@ def run_granule_pipeline(cfg):
 
     start_time = datetime.now().astimezone()
     start_tic = time.perf_counter()
-    print(f"Start time: {start_time}\n")
+    print(f"\nStart time: {start_time}")
 
     request = resolve_processing_request(cfg)
     output_path = _execute_pipeline(request)
