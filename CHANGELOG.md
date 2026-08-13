@@ -1,11 +1,12 @@
 # Changelog
 
-## Unreleased
+## [2.0.0] - 2026-08-13
 
 ### Changed
 
-- Reorganized the package.
-- Replaced HDF4 product output with compressed netCDF-4 output and CF metadata.
+- Major refactor of the processing pipeline and internal architecture.
+- Switched output from HDF4 to compressed NetCDF-4 with CF-compliant metadata.
+- Improved processing performance.
 
 ## [1.1.10] - 2026-08-10
 
