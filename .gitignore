@@ -38,3 +38,6 @@ runs/*
 # Local copies of example configs
 config/*.yaml
 !config/*.example.yaml
+
+# Agents
+AGENTS.md

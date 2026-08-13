@@ -4,6 +4,24 @@ Two-dimensional and multi-channel detection algorithm for the CALIPSO/CALIOP lid
 
 2D-McDA processes CALIOP Level 1 attenuated-backscatter profiles and produces two-dimensional feature-detection masks from the 532 nm parallel, 532 nm perpendicular, and 1064 nm channels.
 
+## Source-code organization
+
+The package is divided by responsibility:
+
+```text
+twod_mcda/
+├── algorithm/   # scientific detection, filtering and mask combination
+├── caliop/      # HDF4 access, CALIOP conventions and grid transformations
+├── workflow/    # granule, neighbor and slice orchestration
+├── output/      # netCDF schema and serialization
+├── utils/       # cross-cutting utilities
+└── pipeline.py  # public processing entry point
+```
+
+The scientific algorithm operates on NumPy arrays and masked arrays. CALIOP
+file access is confined to `caliop`, while `output` is responsible only for
+turning processing results into the final netCDF product.
+
 ## 1. Input and output data
 
 ### 1.1 Input

@@ -10,17 +10,17 @@ from unittest.mock import patch
 from netCDF4 import Dataset
 import numpy as np
 
-from twod_mcda.io.product_writer import (
+from twod_mcda.output.product import (
     build_output_variables,
     output_filename,
     write_product,
 )
-from twod_mcda.preprocessing.neighbors import append_adjacent_profiles
-from twod_mcda.processing.granule_processor import (
+from twod_mcda.workflow.neighbors import append_adjacent_profiles
+from twod_mcda.workflow.processor import (
     _load_initial_data,
     _store_development,
 )
-from twod_mcda.processing.models import ProcessingRequest, ProcessingResult
+from twod_mcda.workflow.models import ProcessingRequest, ProcessingResult
 
 
 def request():
@@ -45,7 +45,7 @@ def request():
 
 
 class RefactoredComponentTests(unittest.TestCase):
-    @patch("twod_mcda.processing.granule_processor.open_caliop_reader")
+    @patch("twod_mcda.workflow.processor.open_caliop_reader")
     def test_interior_subset_does_not_load_or_display_neighbors(self, open_reader):
         current_reader = SimpleNamespace(
             filepath="/data/current.hdf",
@@ -72,10 +72,10 @@ class RefactoredComponentTests(unittest.TestCase):
         self.assertNotIn("Next     :", output.getvalue())
 
     @patch(
-        "twod_mcda.processing.granule_processor.load_processing_variables",
+        "twod_mcda.workflow.processor.load_processing_variables",
         return_value={},
     )
-    @patch("twod_mcda.processing.granule_processor.open_caliop_reader")
+    @patch("twod_mcda.workflow.processor.open_caliop_reader")
     def test_full_granule_loads_and_displays_both_neighbors(
         self,
         open_reader,

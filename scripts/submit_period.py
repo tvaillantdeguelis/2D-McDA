@@ -12,7 +12,7 @@ import yaml
 
 from config_loader import load_config
 from submit_granule import submit_granule
-from twod_mcda.io.granule_finder import find_granules_between_dates
+from twod_mcda.caliop.discovery import find_granules_between_dates
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
