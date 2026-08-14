@@ -1,10 +1,17 @@
 # Changelog
 
+
+## [2.1.1] - 2026-08-14
+
+### Removed
+
+- Removed test/ from repository.
+
 ## [2.1.0] - 2026-08-14
 
 ### Changed
 
-- Modify slicing.
+- Modified slicing.
 
 ## [2.0.0] - 2026-08-13
 
