@@ -22,14 +22,6 @@ Files must be stored below the directory configured by `cal_lid_l1.root_director
 
 For each requested granule, the pipeline also looks for the preceding and following granules. They provide the neighboring profiles required to process the edges of the current granule continuously. The search includes the previous and next calendar days to handle granules close to midnight.
 
-Scientific arrays are read directly from HDF4 one profile slice at a time.
-Only the latitude and longitude coordinates needed to plan the run, the active
-slice, and up to 250 context profiles from any required neighboring granule
-are retained as inputs. Each result slice spans up to 3000 profile indexes and
-is processed with 250 context profiles on both sides. Only the result interval
-is retained; complete detection masks are assembled in memory for the final
-netCDF write.
-
 ### 1.2 Output
 
 The current pipeline writes one netCDF-4 file (using HDF5 storage) containing:
