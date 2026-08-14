@@ -24,9 +24,11 @@ For each requested granule, the pipeline also looks for the preceding and follow
 
 Scientific arrays are read directly from HDF4 one profile slice at a time.
 Only the latitude and longitude coordinates needed to plan the run, the active
-slice, and the 500-profile edge regions of any required neighboring granules
-are retained as inputs. Complete detection masks are assembled in memory for
-the final netCDF write.
+slice, and up to 250 context profiles from any required neighboring granule
+are retained as inputs. Each result slice spans up to 3000 profile indexes and
+is processed with 250 context profiles on both sides. Only the result interval
+is retained; complete detection masks are assembled in memory for the final
+netCDF write.
 
 ### 1.2 Output
 

@@ -1,4 +1,4 @@
-"""Plan and trim overlapping profile slices."""
+"""Plan profile slices and trim adjacent-granule context."""
 
 import numpy as np
 
@@ -7,51 +7,48 @@ def plan_slices(
     profile_min,
     profile_max,
     slice_size,
-    overlap_size,
+    context_size,
 ):
     """
-    Compute the start and end profile indexes of processing slices.
+    Compute result slices and the context required to process each one.
+
+    Context bounds are intentionally not clipped to a granule: negative
+    indexes and indexes beyond the current granule identify data that must be
+    read from adjacent granules.
 
     Parameters
     ----------
     profile_min : int
-        First profile index to process.
+        First requested profile index.
     profile_max : int
-        Last profile index to process.
+        Last requested profile index.
     slice_size : int
-        Maximum number of profiles in one slice.
-    overlap_size : int
-        Number of overlapping profiles between consecutive slices.
+        Maximum distance between the inclusive result bounds of one slice.
+    context_size : int
+        Number of input context profiles on each side of every result slice.
 
     Returns
     -------
-    start_indexes : numpy.ndarray
-        Start profile index of each slice.
-    end_indexes : numpy.ndarray
-        End profile index of each slice.
+    profile_starts, profile_ends : numpy.ndarray
+        Inclusive bounds of the profiles retained from each slice.
+    context_starts, context_ends : numpy.ndarray
+        Inclusive input bounds used to process each slice.
     """
 
-    profile_count = profile_max - profile_min + 1
-
-    # Process the full interval as a single slice when it is small enough.
-    if profile_count <= slice_size:
-        return (
-            np.array([profile_min]),
-            np.array([profile_max]),
-        )
-
-    # Create overlapping slices. A very short final slice is merged into
-    # the previous one by stopping the sequence before half a slice remains.
-    start_indexes = np.arange(
+    profile_starts = np.arange(
         profile_min,
-        profile_max - slice_size // 2 + 2,
-        slice_size - overlap_size,
+        profile_max,
+        slice_size,
+        dtype=int,
     )
+    if profile_starts.size == 0:
+        profile_starts = np.array([profile_min], dtype=int)
 
-    end_indexes = start_indexes + slice_size - 1
-    end_indexes[-1] = profile_max
+    profile_ends = np.minimum(profile_starts + slice_size, profile_max)
+    context_starts = profile_starts - context_size
+    context_ends = profile_ends + context_size
 
-    return start_indexes, end_indexes
+    return profile_starts, profile_ends, context_starts, context_ends
 
 
 def trim_profiles(array, profile_count, side):

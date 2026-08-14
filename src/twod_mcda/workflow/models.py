@@ -38,8 +38,8 @@ class SliceData:
     input: ArrayMapping
     masks: ArrayMapping = field(default_factory=dict)
     development: ArrayMapping = field(default_factory=dict)
-    previous_profiles_used: bool = False
-    next_profiles_used: bool = False
+    previous_context_count: int = 0
+    next_context_count: int = 0
 
 
 @dataclass
