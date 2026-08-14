@@ -39,7 +39,7 @@ git show-ref --verify --quiet refs/heads/main \
 git show-ref --verify --quiet refs/heads/develop \
     || fail "local branch develop does not exist."
 git show-ref --verify --quiet "refs/tags/${TAG}" \
-    || fail "local tag ${TAG} does not exist."
+    || fail "release ${VERSION} has not been prepared locally; run scripts/release.sh ${VERSION} first."
 
 TAG_COMMIT=$(git rev-list -n 1 "${TAG}")
 MAIN_COMMIT=$(git rev-parse main)

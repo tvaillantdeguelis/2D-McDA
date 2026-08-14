@@ -14,9 +14,23 @@ from twod_mcda.output.product import (
     output_filename,
     write_product,
 )
-from twod_mcda.pipeline import _open_inputs, _store_development
+from twod_mcda.pipeline import (
+    DETECTION_MASKS,
+    PROFILE_METADATA,
+    _empty_output,
+    _open_inputs,
+    _slice_description,
+    _store_development,
+    _store_slice,
+)
 from twod_mcda.workflow.neighbors import append_adjacent_profiles
-from twod_mcda.workflow.models import ProcessingRequest, ProcessingResult
+from twod_mcda.workflow.models import (
+    ProcessingRequest,
+    ProcessingResult,
+    SliceData,
+)
+from twod_mcda.workflow.processing import _trim_neighbor_profiles
+from twod_mcda.workflow.slicing import plan_slices
 
 
 def request():
@@ -42,6 +56,66 @@ def request():
 
 
 class RefactoredComponentTests(unittest.TestCase):
+    def test_slice_plan_separates_result_profiles_from_context(self):
+        (
+            profile_starts,
+            profile_ends,
+            context_starts,
+            context_ends,
+        ) = plan_slices(0, 10000, 3000, 250)
+
+        np.testing.assert_array_equal(
+            profile_starts,
+            np.array([0, 3000, 6000, 9000]),
+        )
+        np.testing.assert_array_equal(
+            profile_ends,
+            np.array([3000, 6000, 9000, 10000]),
+        )
+        np.testing.assert_array_equal(
+            context_starts,
+            np.array([-250, 2750, 5750, 8750]),
+        )
+        np.testing.assert_array_equal(
+            context_ends,
+            np.array([3250, 6250, 9250, 10250]),
+        )
+
+    def test_slice_plan_handles_a_single_profile(self):
+        result = plan_slices(42, 42, 3000, 250)
+
+        expected = (
+            np.array([42]),
+            np.array([42]),
+            np.array([-208]),
+            np.array([292]),
+        )
+        for actual, expected_values in zip(result, expected):
+            np.testing.assert_array_equal(actual, expected_values)
+
+    def test_slice_descriptions_show_result_and_context_bounds(self):
+        bounds = (
+            (0, 3000, -250, 3250),
+            (3000, 6000, 2750, 6250),
+            (6000, 9000, 5750, 9250),
+            (9000, 10000, 8750, 10250),
+        )
+
+        descriptions = [
+            _slice_description(index, 4, *slice_bounds)
+            for index, slice_bounds in enumerate(bounds, start=1)
+        ]
+
+        self.assertEqual(
+            descriptions,
+            [
+                "Process slice 1/4 (profiles 0 to 3000 using slice -250 to 3250)",
+                "Process slice 2/4 (profiles 3000 to 6000 using slice 2750 to 6250)",
+                "Process slice 3/4 (profiles 6000 to 9000 using slice 5750 to 9250)",
+                "Process slice 4/4 (profiles 9000 to 10000 using slice 8750 to 10250)",
+            ],
+        )
+
     @patch("twod_mcda.caliop.reader.HDF4Reader")
     def test_caliop_reader_reads_only_the_requested_hyperslab(self, hdf_reader):
         hdf = hdf_reader.return_value.__enter__.return_value
@@ -97,6 +171,120 @@ class RefactoredComponentTests(unittest.TestCase):
         self.assertIs(result[0], current_reader)
         self.assertIsNone(result[1])
         self.assertIsNone(result[2])
+        np.testing.assert_array_equal(result[5], np.array([4000]))
+        np.testing.assert_array_equal(result[6], np.array([5000]))
+        np.testing.assert_array_equal(result[7], np.array([3750]))
+        np.testing.assert_array_equal(result[8], np.array([5250]))
+
+    @patch("twod_mcda.pipeline.open_granule")
+    def test_context_touching_granule_edges_does_not_load_neighbors(
+        self,
+        open_granule,
+    ):
+        stack = MagicMock()
+        stack.enter_context.side_effect = lambda reader: reader
+
+        cases = (
+            (250, 1000, np.array([0]), np.array([1250])),
+            (9000, 9749, np.array([8750]), np.array([9999])),
+        )
+        for subset_start, subset_end, expected_starts, expected_ends in cases:
+            with self.subTest(start=subset_start, end=subset_end):
+                current_reader = SimpleNamespace(
+                    filepath="/data/current.hdf",
+                    prof_min=subset_start,
+                    prof_max=subset_end,
+                    data_reader=SimpleNamespace(nb_profiles=10000),
+                )
+                open_granule.reset_mock()
+                open_granule.return_value = current_reader
+                processing_request = replace(
+                    request(),
+                    previous_granule="previous",
+                    next_granule="next",
+                    subset_start=subset_start,
+                    subset_end=subset_end,
+                )
+
+                result = _open_inputs(processing_request, stack)
+
+                open_granule.assert_called_once()
+                self.assertIsNone(result[1])
+                self.assertIsNone(result[2])
+                np.testing.assert_array_equal(result[7], expected_starts)
+                np.testing.assert_array_equal(result[8], expected_ends)
+
+    @patch("twod_mcda.pipeline.read_slice", return_value={})
+    @patch("twod_mcda.pipeline.open_granule")
+    def test_subset_at_start_loads_previous_context(
+        self,
+        open_granule,
+        read_slice,
+    ):
+        current_reader = SimpleNamespace(
+            filepath="/data/current.hdf",
+            prof_min=0,
+            prof_max=4000,
+            data_reader=SimpleNamespace(nb_profiles=10000),
+        )
+        previous_reader = SimpleNamespace(
+            filepath="/data/previous.hdf",
+            prof_min=9750,
+            prof_max=9999,
+        )
+        open_granule.side_effect = [current_reader, previous_reader]
+        stack = MagicMock()
+        stack.enter_context.side_effect = lambda reader: reader
+        processing_request = replace(
+            request(),
+            previous_granule="previous",
+            subset_start=0,
+            subset_end=4000,
+        )
+
+        result = _open_inputs(processing_request, stack)
+
+        self.assertEqual(open_granule.call_count, 2)
+        read_slice.assert_called_once_with(previous_reader, 9750, 9999)
+        np.testing.assert_array_equal(result[5], np.array([0, 3000]))
+        np.testing.assert_array_equal(result[6], np.array([3000, 4000]))
+        np.testing.assert_array_equal(result[7], np.array([-250, 2750]))
+        np.testing.assert_array_equal(result[8], np.array([3250, 4250]))
+
+    @patch("twod_mcda.pipeline.read_slice", return_value={})
+    @patch("twod_mcda.pipeline.open_granule")
+    def test_subset_near_start_loads_only_the_missing_context(
+        self,
+        open_granule,
+        read_slice,
+    ):
+        current_reader = SimpleNamespace(
+            filepath="/data/current.hdf",
+            prof_min=100,
+            prof_max=1000,
+            data_reader=SimpleNamespace(nb_profiles=10000),
+        )
+        previous_reader = SimpleNamespace(
+            filepath="/data/previous.hdf",
+            prof_min=9850,
+            prof_max=9999,
+        )
+        open_granule.side_effect = [current_reader, previous_reader]
+        stack = MagicMock()
+        stack.enter_context.side_effect = lambda reader: reader
+        processing_request = replace(
+            request(),
+            previous_granule="previous",
+            subset_start=100,
+            subset_end=1000,
+        )
+
+        result = _open_inputs(processing_request, stack)
+
+        self.assertEqual(open_granule.call_args_list[1].args[3:], (-150, None))
+        read_slice.assert_called_once_with(previous_reader, 9850, 9999)
+        np.testing.assert_array_equal(result[7], np.array([-150]))
+        np.testing.assert_array_equal(result[8], np.array([1250]))
 
     @patch("twod_mcda.pipeline.read_slice", return_value={})
     @patch("twod_mcda.pipeline.open_granule")
@@ -113,13 +301,13 @@ class RefactoredComponentTests(unittest.TestCase):
         )
         previous_reader = SimpleNamespace(
             filepath="/data/previous.hdf",
-            prof_min=9500,
+            prof_min=9750,
             prof_max=9999,
         )
         next_reader = SimpleNamespace(
             filepath="/data/next.hdf",
             prof_min=0,
-            prof_max=499,
+            prof_max=249,
         )
         open_granule.side_effect = [current_reader, previous_reader, next_reader]
         stack = MagicMock()
@@ -159,6 +347,39 @@ class RefactoredComponentTests(unittest.TestCase):
             current["Lidar_Data_Altitudes"],
         )
 
+    def test_neighbor_context_is_trimmed_using_the_actual_counts(self):
+        slice_data = SliceData(
+            input={
+                "Profile_Time": np.arange(6),
+                "Lidar_Data_Altitudes": np.arange(4),
+            },
+            masks={"mask": np.arange(6)[:, np.newaxis]},
+            development={
+                "steps": np.arange(12).reshape(2, 6, 1),
+            },
+            previous_context_count=2,
+            next_context_count=1,
+        )
+
+        _trim_neighbor_profiles(slice_data)
+
+        np.testing.assert_array_equal(
+            slice_data.input["Profile_Time"],
+            np.array([2, 3, 4]),
+        )
+        np.testing.assert_array_equal(
+            slice_data.input["Lidar_Data_Altitudes"],
+            np.arange(4),
+        )
+        np.testing.assert_array_equal(
+            slice_data.masks["mask"][:, 0],
+            np.array([2, 3, 4]),
+        )
+        np.testing.assert_array_equal(
+            slice_data.development["steps"][:, :, 0],
+            np.array([[2, 3, 4], [8, 9, 10]]),
+        )
+
     def test_development_slices_share_the_full_profile_dimension(self):
         output = {}
         first = {
@@ -170,14 +391,65 @@ class RefactoredComponentTests(unittest.TestCase):
             "steps": np.full((2, 3, 2), 2, dtype=np.uint8),
         }
 
-        _store_development(output, first, 10, 12, 10, 5)
-        _store_development(output, second, 12, 14, 10, 5)
+        _store_development(output, first, 10, 12, 10, 10, 5)
+        _store_development(output, second, 12, 14, 12, 10, 5)
 
         self.assertEqual(output["transmittance"].shape, (5, 2))
         self.assertEqual(output["steps"].shape, (2, 5, 2))
         np.testing.assert_array_equal(
             output["transmittance"][:, 0],
             np.array([1.0, 1.0, 2.0, 2.0, 2.0]),
+        )
+
+    def test_storing_a_slice_excludes_its_context(self):
+        profile_min = 40000
+        profile_max = 43000
+        context_min = 39750
+        context_max = 43250
+        requested_min = 40000
+        profile_indexes = np.arange(context_min, context_max + 1)
+        output = _empty_output(10001, 1)
+        slice_data = SliceData(
+            input={name: profile_indexes.copy() for name in PROFILE_METADATA},
+            masks={
+                name: profile_indexes[:, np.newaxis].astype(np.uint8)
+                for name in DETECTION_MASKS
+            },
+        )
+
+        _store_slice(
+            output,
+            slice_data,
+            profile_min,
+            profile_max,
+            context_min,
+            requested_min,
+        )
+
+        np.testing.assert_array_equal(
+            output["Profile_ID"][:3001],
+            np.arange(40000, 43001),
+        )
+        self.assertEqual(output["Profile_ID"].shape, (10001,))
+
+    def test_development_data_is_cropped_to_the_requested_subset(self):
+        output = {}
+        values = np.arange(3501)[:, np.newaxis]
+
+        _store_development(
+            output,
+            {"values": values},
+            40000,
+            43000,
+            39750,
+            40000,
+            10001,
+        )
+
+        self.assertEqual(output["values"].shape, (10001, 1))
+        np.testing.assert_array_equal(
+            output["values"][:3001, 0],
+            np.arange(250, 3251),
         )
 
     def test_output_schema_matches_current_product(self):

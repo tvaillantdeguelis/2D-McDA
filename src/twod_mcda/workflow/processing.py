@@ -4,22 +4,24 @@ from twod_mcda.algorithm.composite import merged_feature_masks
 from twod_mcda.algorithm.features import detect_features_in_3_channels
 from twod_mcda.algorithm.surface import detect_surface_in_3_channels
 from twod_mcda.utils.timing import timer
-from twod_mcda.workflow.settings import NB_PROF_OVERLAP
 from twod_mcda.workflow.slicing import trim_profiles
 
 
 def _trim_neighbor_profiles(slice_data):
-    if slice_data.previous_profiles_used:
-        side = "start"
-    elif slice_data.next_profiles_used:
-        side = "end"
-    else:
-        return
+    context_by_side = (
+        ("start", slice_data.previous_context_count),
+        ("end", slice_data.next_context_count),
+    )
 
-    print(f"\n\n*****Remove profiles from {side} adjacent file...*****")
-    for mapping in (slice_data.input, slice_data.masks, slice_data.development):
-        for name, values in mapping.items():
-            mapping[name] = trim_profiles(values, NB_PROF_OVERLAP, side)
+    for side, profile_count in context_by_side:
+        if profile_count == 0:
+            continue
+        print(f"\n\n*****Remove context from {side} adjacent file...*****")
+        for mapping in (slice_data.input, slice_data.masks, slice_data.development):
+            for name, values in mapping.items():
+                if name == "Lidar_Data_Altitudes":
+                    continue
+                mapping[name] = trim_profiles(values, profile_count, side)
 
 
 def process_slice(slice_data):

@@ -60,7 +60,11 @@ UNTRACKED_FILES=$(git ls-files --others --exclude-standard)
 [[ -z ${UNTRACKED_FILES} ]] \
     || fail "untracked files are present: ${UNTRACKED_FILES//$'\n'/, }."
 
-git commit -m "Prepare release ${VERSION}" -- "${VERSION_FILE}" "${CHANGELOG_FILE}"
+if ! git diff --quiet HEAD -- "${VERSION_FILE}" "${CHANGELOG_FILE}"; then
+    git commit -m "Prepare release ${VERSION}" -- "${VERSION_FILE}" "${CHANGELOG_FILE}"
+else
+    echo "${VERSION_FILE} and ${CHANGELOG_FILE} are already committed; continuing release preparation."
+fi
 git switch main
 git merge --no-ff develop -m "Merge develop into main for ${TAG} release"
 

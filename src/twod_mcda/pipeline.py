@@ -19,7 +19,7 @@ from .workflow.neighbors import (
     profiles_are_consecutive,
 )
 from .workflow.processing import process_slice
-from .workflow.settings import NB_PROF_EDGE, NB_PROF_OVERLAP, NB_PROF_SLICE
+from .workflow.settings import NB_PROF_CONTEXT, NB_PROF_SLICE
 from .workflow.slicing import plan_slices
 from .version import get_full_version
 
@@ -149,7 +149,16 @@ def resolve_processing_request(cfg):
     )
 
 
-def _print_request(request, granule, previous_granule, next_granule, profile_count, nb_slices):
+def _print_request(
+    request,
+    granule,
+    previous_granule,
+    next_granule,
+    profile_count,
+    nb_slices,
+    previous_context_count=0,
+    next_context_count=0,
+):
     """Print only the input and processing settings useful to the user."""
 
     if request.subset_active and request.subset_mode == "profindex":
@@ -175,33 +184,37 @@ def _print_request(request, granule, previous_granule, next_granule, profile_cou
 
     print(f"\n=> Current L1 file to process :\n{granule.filepath}")
 
-    if request.previous_granule is None:
-        print(
-            f"\n=> Previous L1 file: Not found. The algorithm will run without it and this may introduce artifacts in the first {NB_PROF_OVERLAP} profiles."
-        )
-    elif previous_granule is None:
-        pass
-    else:
-        print(
-            f"\n=> Previous L1 file (used to provide {NB_PROF_OVERLAP} overlapping profiles at the start):\n{previous_granule.filepath}"
-        )
+    if previous_context_count:
+        if previous_granule is None:
+            print(
+                "\n=> Previous L1 file: Not found. The algorithm will run "
+                "without start context and this may introduce artifacts in "
+                f"the first {previous_context_count} profiles."
+            )
+        else:
+            print(
+                "\n=> Previous L1 file (used to provide context at the "
+                f"start):\n{previous_granule.filepath}"
+            )
 
-    if request.next_granule is None:
-        print(
-            f"\n=> Next L1 file: Not found. The algorithm will run without it and this may introduce artifacts in the last {NB_PROF_OVERLAP} profiles."
-        )
-    elif next_granule is None:
-        pass
-    else:
-        print(
-            f"\n=> Next L1 file (used to provide {NB_PROF_OVERLAP} overlapping profiles at the end):\n{next_granule.filepath}"
-        )
+    if next_context_count:
+        if next_granule is None:
+            print(
+                "\n=> Next L1 file: Not found. The algorithm will run "
+                "without end context and this may introduce artifacts in "
+                f"the last {next_context_count} profiles."
+            )
+        else:
+            print(
+                "\n=> Next L1 file (used to provide context at the end):"
+                f"\n{next_granule.filepath}"
+            )
 
     print(f"\nNumber of profiles to process: {profile_count} in {nb_slices} slices\n")
 
 
 def _open_inputs(request, stack):
-    """Open the current granule and read only the optional neighbor overlaps."""
+    """Open the current granule and any required neighboring context."""
 
     granule = stack.enter_context(
         open_granule(
@@ -213,23 +226,33 @@ def _open_inputs(request, stack):
             request.subset_mode,
         )
     )
-    starts, ends = plan_slices(
+    (
+        profile_starts,
+        profile_ends,
+        context_starts,
+        context_ends,
+    ) = plan_slices(
         granule.prof_min,
         granule.prof_max,
         NB_PROF_SLICE,
-        NB_PROF_OVERLAP,
+        NB_PROF_CONTEXT,
     )
     granule_last_profile = granule.data_reader.nb_profiles - 1
+    previous_context_count = max(0, -int(context_starts[0]))
+    next_context_count = max(
+        0,
+        int(context_ends[-1]) - granule_last_profile,
+    )
 
     previous_granule = None
     previous = None
-    if starts[0] == 0 and request.previous_granule is not None:
+    if previous_context_count and request.previous_granule is not None:
         previous_granule = stack.enter_context(
             open_granule(
                 request,
                 request.previous_granule,
                 request.previous_directory,
-                -NB_PROF_OVERLAP,
+                -previous_context_count,
                 None,
             )
         )
@@ -241,14 +264,14 @@ def _open_inputs(request, stack):
 
     next_granule = None
     following = None
-    if ends[-1] == granule_last_profile and request.next_granule is not None:
+    if next_context_count and request.next_granule is not None:
         next_granule = stack.enter_context(
             open_granule(
                 request,
                 request.next_granule,
                 request.next_directory,
                 None,
-                NB_PROF_OVERLAP - 1,
+                next_context_count - 1,
             )
         )
         following = read_slice(
@@ -263,8 +286,27 @@ def _open_inputs(request, stack):
         next_granule,
         previous,
         following,
-        starts,
-        ends,
+        profile_starts,
+        profile_ends,
+        context_starts,
+        context_ends,
+    )
+
+
+def _slice_description(
+    index,
+    slice_count,
+    profile_min,
+    profile_max,
+    context_min,
+    context_max,
+):
+    """Describe both the retained profiles and the full algorithm input."""
+
+    return (
+        f"Process slice {index:d}/{slice_count:d} "
+        f"(profiles {profile_min:d} to {profile_max:d} using slice "
+        f"{context_min:d} to {context_max:d})"
     )
 
 
@@ -299,7 +341,7 @@ def _read_processing_slice(
     previous,
     following,
 ):
-    """Read one current-granule slice and add a neighbor at file edges."""
+    """Read one current-granule slice and add context at file edges."""
 
     data = read_slice(granule, profile_min, profile_max)
     slice_data = SliceData(input=data)
@@ -314,12 +356,11 @@ def _read_processing_slice(
         if profiles_are_consecutive(previous["Profile_Time"][-1], data["Profile_Time"][0]):
             print("\tAppend previous granule")
             slice_data.input = append_adjacent_profiles(data, previous, "start")
-            slice_data.previous_profiles_used = True
+            slice_data.previous_context_count = previous["Profile_Time"].size
         else:
-            print("\tPrevious granule does not seem consecutive. First profiles not processed.")
-    elif profile_min == 0:
-        print("\tNo previous file to load. First profiles not processed.")
-    elif profile_max == granule_last_profile and following is not None:
+            print("\tPrevious granule does not seem consecutive. No start context added.")
+
+    if profile_max == granule_last_profile and following is not None:
         time_gap = np.abs(following["Profile_Time"][0] - data["Profile_Time"][-1])
         print(
             "\tTime between last profile of current file and first profile "
@@ -327,32 +368,44 @@ def _read_processing_slice(
         )
         if profiles_are_consecutive(data["Profile_Time"][-1], following["Profile_Time"][0]):
             print("\tAppend next granule")
-            slice_data.input = append_adjacent_profiles(data, following, "end")
-            slice_data.next_profiles_used = True
+            slice_data.input = append_adjacent_profiles(
+                slice_data.input,
+                following,
+                "end",
+            )
+            slice_data.next_context_count = following["Profile_Time"].size
         else:
-            print("\tNext granule does not seem consecutive. Last profiles not processed.")
-    elif profile_max == granule_last_profile:
-        print("\tNo next file to load. Last profiles not processed.")
+            print("\tNext granule does not seem consecutive. No end context added.")
 
     return slice_data
 
 
-def _store_slice(output, slice_data, profile_min, profile_max, file_min):
-    store_min = profile_min - file_min
-    store_max = profile_max - file_min
+def _store_slice(
+    output,
+    slice_data,
+    profile_min,
+    profile_max,
+    input_profile_min,
+    file_min,
+):
+    """Store only the result interval, excluding its processing context."""
+
+    file_max = file_min + output[PROFILE_METADATA[0]].shape[0] - 1
+    copy_min = max(profile_min, file_min)
+    copy_max = min(profile_max, file_max)
+    if copy_min > copy_max:
+        return
+
+    output_slice = slice(copy_min - file_min, copy_max - file_min + 1)
+    input_slice = slice(
+        copy_min - input_profile_min,
+        copy_max - input_profile_min + 1,
+    )
 
     for name in PROFILE_METADATA:
-        output[name][store_min:store_max + 1] = np.copy(slice_data.input[name])
-
-    if slice_data.previous_profiles_used:
-        output_slice = slice(store_min, store_max - NB_PROF_EDGE + 1)
-        input_slice = slice(None, -NB_PROF_EDGE)
-    elif slice_data.next_profiles_used:
-        output_slice = slice(store_min + NB_PROF_EDGE, store_max + 1)
-        input_slice = slice(NB_PROF_EDGE, None)
-    else:
-        output_slice = slice(store_min + NB_PROF_EDGE, store_max - NB_PROF_EDGE + 1)
-        input_slice = slice(NB_PROF_EDGE, -NB_PROF_EDGE)
+        output[name][output_slice] = np.copy(
+            slice_data.input[name][input_slice]
+        )
 
     for name in DETECTION_MASKS:
         output[name][output_slice, :] = slice_data.masks[name][input_slice, :]
@@ -363,13 +416,22 @@ def _store_development(
     slice_development,
     profile_min,
     profile_max,
+    input_profile_min,
     file_min,
     profile_count,
 ):
-    """Assemble development arrays using one shared profile dimension."""
+    """Store development data without the processing context."""
 
-    store_min = profile_min - file_min
-    store_max = profile_max - file_min + 1
+    file_max = file_min + profile_count - 1
+    copy_min = max(profile_min, file_min)
+    copy_max = min(profile_max, file_max)
+    if copy_min > copy_max:
+        return
+
+    store_min = copy_min - file_min
+    store_max = copy_max - file_min + 1
+    input_min = copy_min - input_profile_min
+    input_max = copy_max - input_profile_min + 1
 
     for name, values in slice_development.items():
         values = np.asanyarray(values)
@@ -394,9 +456,16 @@ def _store_development(
                 output[name] = np.full(shape, fill_value, dtype=values.dtype)
 
         if profile_axis == 0:
-            output[name][store_min:store_max, :] = values
+            output[name][store_min:store_max, :] = values[
+                input_min:input_max,
+                :,
+            ]
         else:
-            output[name][:, store_min:store_max, :] = values
+            output[name][:, store_min:store_max, :] = values[
+                :,
+                input_min:input_max,
+                :,
+            ]
 
 
 def assemble_results(output, development, altitude, granule):
@@ -419,26 +488,62 @@ def _execute_pipeline(request):
             next_granule,
             previous,
             following,
-            starts,
-            ends,
+            profile_starts,
+            profile_ends,
+            context_starts,
+            context_ends,
         ) = _open_inputs(request, stack)
         profile_count = granule.prof_max - granule.prof_min + 1
-        nb_slices = starts.size
+        nb_slices = profile_starts.size
+        granule_last_profile = granule.data_reader.nb_profiles - 1
         altitude = granule.get_data("Lidar_Data_Altitudes")
         output = _empty_output(profile_count, altitude.size)
 
-        _print_request(request, granule, previous_granule, next_granule, profile_count, nb_slices)
+        _print_request(
+            request,
+            granule,
+            previous_granule,
+            next_granule,
+            profile_count,
+            nb_slices,
+            previous_context_count=max(0, -int(context_starts[0])),
+            next_context_count=max(
+                0,
+                int(context_ends[-1]) - granule_last_profile,
+            ),
+        )
 
         development = {}
-        for index, (profile_min, profile_max) in enumerate(
-            zip(starts, ends),
+        slices = zip(
+            profile_starts,
+            profile_ends,
+            context_starts,
+            context_ends,
+        )
+        for index, (
+            profile_min,
+            profile_max,
+            context_min,
+            context_max,
+        ) in enumerate(
+            slices,
             start=1,
         ):
-            with timer(f"Process slice {index:d}/{starts.size:d} (profiles {profile_min:d} to {profile_max:d})"):
+            input_profile_min = max(int(context_min), 0)
+            input_profile_max = min(int(context_max), granule_last_profile)
+            description = _slice_description(
+                index,
+                nb_slices,
+                profile_min,
+                profile_max,
+                context_min,
+                context_max,
+            )
+            with timer(description):
                 with timer("Load slice data"):
                     slice_data = _read_processing_slice(
-                        profile_min,
-                        profile_max,
+                        input_profile_min,
+                        input_profile_max,
                         granule,
                         previous,
                         following,
@@ -450,6 +555,7 @@ def _execute_pipeline(request):
                         slice_data.development,
                         profile_min,
                         profile_max,
+                        input_profile_min,
                         granule.prof_min,
                         profile_count,
                     )
@@ -461,6 +567,7 @@ def _execute_pipeline(request):
                         slice_data,
                         profile_min,
                         profile_max,
+                        input_profile_min,
                         granule.prof_min,
                     )
 
