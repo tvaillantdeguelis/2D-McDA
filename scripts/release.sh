@@ -30,6 +30,9 @@ cd "${PROJECT_ROOT}"
 [[ ${VERSION} =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
     || fail "version must use the MAJOR.MINOR.PATCH format."
 
+grep -q "^## \[${VERSION}\]" "${CHANGELOG_FILE}" \
+    || fail "version ${VERSION} not found in ${CHANGELOG_FILE}. Please add an entry for this version."
+
 CURRENT_BRANCH=$(git branch --show-current)
 [[ ${CURRENT_BRANCH} == "develop" ]] \
     || fail "release preparation must start on develop (currently on ${CURRENT_BRANCH:-detached HEAD})."
