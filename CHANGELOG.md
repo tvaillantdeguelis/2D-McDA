@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.1.2] - 2026-08-17
+
+### Fixed
+
+- Restored detection coefficients to correct values
+
 ## [2.1.1] - 2026-08-14
 
 ### Removed
