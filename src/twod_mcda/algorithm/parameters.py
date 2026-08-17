@@ -51,8 +51,8 @@ def get_feature_detection_coef(channel, level):
     if channel == "532_par":
         k = [100, 20, 2, 1, 1]
         n = [1, 1, 60, 200, 100000]
-        s = [None, None, (11, 11), (3, 21), (17, 105)]
-        a = [None, None, None, None, (105, 35)]
+        s = [None, None, (11, 11), (3, 21), (9, 51)]
+        a = [None, None, None, None, (15, 5)]
     elif channel == "532_per":
         k = [500, 100, 2, 1, 1]
         n = [1, 1, 60, 200, 1000]
