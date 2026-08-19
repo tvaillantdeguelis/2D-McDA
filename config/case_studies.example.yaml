@@ -9,21 +9,21 @@ case_studies:
     end: 7.65
 
   - name: Antarctic ice wave PSC
-    enabled: false
+    enabled: true
     granule: 2008-07-17T19-15-43ZN
     mode: longitude
     start: 7.34
     end: -68.77
 
   - name: Arctic PSC
-    enabled: false
+    enabled: true
     granule: 2010-01-18T00-19-57ZN
     mode: longitude
     start: 170.68
     end: 27.93
 
   - name: Antarctic faint PSC
-    enabled: false
+    enabled: true
     granule: 2011-06-25T00-11-52ZN
     mode: longitude
     start: 5.95
@@ -108,7 +108,7 @@ case_studies:
     end: -157.47
 
   - name: Yorks et al. (2011) opaque cirrus
-    enabled: false
+    enabled: true
     granule: 2006-08-11T07-52-34ZN
     mode: longitude
     start: -87
