@@ -92,6 +92,7 @@ Copy them locally before running the pipeline:
 
 ```bash
 cp config/common.example.yaml config/common.yaml
+cp config/case_studies.example.yaml config/case_studies.yaml
 cp config/period.example.yaml config/period.yaml
 cp config/single_granule.example.yaml config/single_granule.yaml
 ```
@@ -185,6 +186,8 @@ Slurm execution:
 python scripts/submit_granule.py config/single_granule.yaml
 ```
 
+Complete-granule jobs are named `2D-McDA_<granule>`. Jobs for active subsets are named `2D-McDA_<granule>_<lon/prof>_<start>_<end>`.
+
 ### 4.2 Period processing
 
 Period processing is currently submitted through Slurm:
@@ -192,6 +195,16 @@ Period processing is currently submitted through Slurm:
 ```bash
 python scripts/submit_period.py config/period.yaml
 ```
+
+### 4.3 Case-study processing
+
+Set `enabled: true` for each case study to process, then submit one Slurm job per enabled entry:
+
+```bash
+python scripts/submit_case_studies.py config/case_studies.yaml
+```
+
+The launcher creates complete run configurations under `runs/case_studies/`. Each case study defines its granule and the `mode`, `start`, and `end` bounds of its active subset.
 
 ## 5. Author
 

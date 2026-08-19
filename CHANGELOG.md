@@ -1,10 +1,16 @@
 # Changelog
 
+## [2.2.0] - 2026-08-19
+
+### Added
+
+- Added configurable case-study Slurm submissions.
+
 ## [2.1.2] - 2026-08-17
 
 ### Fixed
 
-- Restored detection coefficients to correct values
+- Restored detection coefficients to correct values.
 
 ## [2.1.1] - 2026-08-14
 
@@ -148,6 +154,8 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.2.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.1.2...v2.2.0
+[2.1.2]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v1.1.10...v2.0.0
