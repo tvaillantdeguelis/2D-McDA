@@ -12,6 +12,27 @@ SBATCH_SCRIPT = PROJECT_ROOT / "scripts" / "process_granule.sbatch"
 LOG_ROOT = PROJECT_ROOT / "logs" / "slurm"
 
 
+def build_job_name(cfg):
+    """Build a Slurm job name from the granule and optional subset."""
+
+    granule = cfg["granule"]
+    subset = cfg.get("subset")
+
+    if not subset or not subset.get("activate", True):
+        return f"2D-McDA_{granule}"
+
+    mode_labels = {
+        "longitude": "lon",
+        "profindex": "prof",
+    }
+    mode = mode_labels[subset["mode"]]
+
+    return (
+        f"2D-McDA_{granule}_{mode}_"
+        f"{subset['start']}_{subset['end']}"
+    )
+
+
 def submit_granule(config_file):
     """
     Submit one CALIOP granule processing job to Slurm.
@@ -33,7 +54,7 @@ def submit_granule(config_file):
     log_dir = LOG_ROOT / year / month
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    job_name = f"2D-McDA_{granule}"
+    job_name = build_job_name(cfg)
 
     command = [
         "sbatch",
