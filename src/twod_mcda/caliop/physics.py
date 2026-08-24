@@ -261,9 +261,34 @@ def range_from_altitude(spacecraft_alt, data_alt, caliop_lidar_tilt):
     )
 
 
+def _correction_values(fcorr, bin_shifts):
+    """Select correction values from integer-valued CALIOP bin shifts."""
+
+    shifts = np.ma.masked_invalid(np.ma.asarray(bin_shifts))
+    shifts = np.ma.atleast_1d(shifts)
+    values = shifts.compressed()
+    if values.size and not np.allclose(values, np.rint(values)):
+        raise ValueError("Number_Bins_Shift contains non-integer values")
+
+    indices = np.ma.filled(shifts, 0).astype(np.intp, copy=False)
+    if indices.size and (
+        indices.min() < 0 or indices.max() >= fcorr.shape[1]
+    ):
+        raise IndexError("Number_Bins_Shift is outside the correction table")
+
+    correction = fcorr[:, indices].T
+    mask = np.broadcast_to(
+        np.ma.getmaskarray(shifts)[:, np.newaxis],
+        correction.shape,
+    )
+    return np.ma.array(correction, mask=mask, copy=False)
+
+
 def compute_shotnoise(fcorr, nb_bins_shift_abs, nb_pixels, nsf, mol_ab):
-    return fcorr[:, nb_bins_shift_abs].T * 1/np.sqrt(nb_pixels) * nsf * 1/np.sqrt(mol_ab)
+    correction = _correction_values(fcorr, nb_bins_shift_abs)
+    return correction * 1/np.sqrt(nb_pixels) * nsf * 1/np.sqrt(mol_ab)
 
   
 def compute_backgroundnoise(fcorr, nb_bins_shift_abs, nb_pixels, rms, mol_ab):
-    return fcorr[:, nb_bins_shift_abs].T * 1/np.sqrt(nb_pixels) * 1/mol_ab * rms
+    correction = _correction_values(fcorr, nb_bins_shift_abs)
+    return correction * 1/np.sqrt(nb_pixels) * 1/mol_ab * rms

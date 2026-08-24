@@ -4,6 +4,7 @@ from copy import copy
 import os
 
 import numpy as np
+import xarray as xr
 from twod_mcda.caliop.derived import CALIOPDerivedVariablesMixin
 from twod_mcda.caliop.hdf import HDF4Reader
 from twod_mcda.caliop.paths import automatic_path_detection
@@ -19,6 +20,8 @@ from twod_mcda.caliop.constants import (
     PRODUCT_H_RESOLUTION,
 )
 from twod_mcda.caliop.geography import get_prof_min_max_indexes_from_lon
+from twod_mcda.caliop.variables import CALIOP_L1_VARIABLE_DIMS
+from twod_mcda.caliop.xarray_utils import as_masked_array
 from twod_mcda.caliop.grids import (
     add_zeros_where_missing_profiles,
     alt_to_regular_30m_vertical_grid,
@@ -95,8 +98,65 @@ class CALIPSOReader:
             if size == 1 and axis != profile_axis
         )
         if axes:
-            return data.squeeze(axis=axes)
+            return data.squeeze(
+                dim=tuple(data.dims[axis] for axis in axes),
+                drop=True,
+            )
         return data
+
+    def _dimension_names(
+        self,
+        key,
+        data,
+        profile_start=0,
+        profile_axis=None,
+    ):
+        """Attach stable semantic dimensions to one CALIOP variable."""
+
+        if not isinstance(data, xr.DataArray):
+            data = xr.DataArray(
+                data,
+                dims=tuple(f"hdf_dim_{axis}" for axis in range(data.ndim)),
+                name=key,
+            )
+        declared = CALIOP_L1_VARIABLE_DIMS.get(key)
+        if declared is not None and len(declared) == data.ndim:
+            dims = declared
+        else:
+            dims = []
+            used = set()
+            for axis, size in enumerate(data.shape):
+                if axis == profile_axis or (
+                    profile_axis is None
+                    and size == self.nb_profiles
+                    and "profile" not in used
+                ):
+                    dim = "profile"
+                elif size == NUMBER_OF_VERTICAL_BINS and "lidar_altitude" not in used:
+                    dim = "lidar_altitude"
+                elif size == NUMBER_OF_VERTICAL_BINS_MET and "met_altitude" not in used:
+                    dim = "met_altitude"
+                else:
+                    dim = f"{key.lower()}_dim_{axis}"
+                dims.append(dim)
+                used.add(dim)
+            dims = tuple(dims)
+
+        coords = {}
+        if "profile" in dims:
+            profile_size = data.shape[dims.index("profile")]
+            coords["profile"] = np.arange(
+                profile_start,
+                profile_start + profile_size,
+                dtype=int,
+            )
+        return xr.DataArray(
+            data.data,
+            dims=dims,
+            coords=coords,
+            name=key,
+            attrs=data.attrs,
+        )
 
     def _read_sds(self, key, profile_min, profile_max):
         shape = self._sds[key][1]
@@ -105,10 +165,22 @@ class CALIPSOReader:
         if profile_axis is None:
             if key not in self._static_cache:
                 data = self._reader.get_data(key, do_squeeze=False)
+                if not isinstance(data, xr.DataArray):
+                    data = xr.DataArray(
+                        data,
+                        dims=tuple(
+                            f"hdf_dim_{axis}" for axis in range(data.ndim)
+                        ),
+                        name=key,
+                    )
                 self._static_cache[key] = self._squeeze_non_profile_axes(
                     data,
                     shape,
                     None,
+                )
+                self._static_cache[key] = self._dimension_names(
+                    key,
+                    self._static_cache[key],
                 )
             return self._static_cache[key]
 
@@ -131,7 +203,25 @@ class CALIPSOReader:
             count=count,
             do_squeeze=False,
         )
+        if not isinstance(data, xr.DataArray):
+            data = xr.DataArray(
+                data,
+                dims=tuple(f"hdf_dim_{axis}" for axis in range(data.ndim)),
+                name=key,
+            )
         data = self._squeeze_non_profile_axes(data, shape, profile_axis)
+        squeezed_before_profile = sum(
+            size == 1
+            for axis, size in enumerate(shape)
+            if axis < profile_axis
+        )
+        effective_profile_axis = profile_axis - squeezed_before_profile
+        data = self._dimension_names(
+            key,
+            data,
+            start_index,
+            effective_profile_axis,
+        )
         self._slice_cache[key] = data
         return data
 
@@ -150,12 +240,17 @@ class CALIPSOReader:
                                      monotonously on one granule unlike latitudes)
                                      default: 'profindex'
         :param do_fillvalue: mask where fillvalue
-        :return: (masked) data array
+        :return: labelled xarray data array
         """
         
         if key in self._metadata:
-            data = np.asanyarray(self._metadata[key])
-            return np.ma.array(data, copy=False) if do_fillvalue else data
+            values = np.asanyarray(self._metadata[key]).squeeze()
+            raw = xr.DataArray(
+                values,
+                dims=tuple(f"metadata_dim_{axis}" for axis in range(values.ndim)),
+                name=key,
+            )
+            return self._dimension_names(key, raw)
         if key not in self._sds:
             raise Exception(f"Error: key = '{key}' not found.\n")
 
@@ -173,7 +268,9 @@ class CALIPSOReader:
 
         data = self._read_sds(key, prof_min, prof_max)
         if do_fillvalue:
-            return np.ma.masked_where(data == self.get_fillvalue(key), data)
+            fill_value = self.get_fillvalue(key)
+            data = data.where(data != fill_value)
+            data.attrs["_FillValue"] = fill_value
         return data
 
 
@@ -230,10 +327,10 @@ class CALIOPReader():
         else:
             raise Exception(f"Error: slice_start_end_type = '{slice_start_end_type}' is not defined. "
                      "Please use 'profindex' or 'longitude'\n")
-        self.lon_min = lon[self.prof_min]
-        self.lat_min = lat[self.prof_min]
-        self.lon_max = lon[self.prof_max]
-        self.lat_max = lat[self.prof_max]
+        self.lon_min = lon.isel(profile=self.prof_min).item()
+        self.lat_min = lat.isel(profile=self.prof_min).item()
+        self.lon_max = lon.isel(profile=self.prof_max).item()
+        self.lat_max = lat.isel(profile=self.prof_max).item()
         self.nb_profiles = self.prof_max - self.prof_min + 1
         
 
@@ -243,7 +340,7 @@ class CALIOPReader():
         
         :param key: a CALIPSO parameter
         :param do_fillvalue: mask where fillvalue
-        :return: (masked) data array
+        :return: labelled xarray data array
         """
         return self.data_reader.get_data(key, self.prof_min, self.prof_max, 'profindex', do_fillvalue)
 
@@ -292,8 +389,8 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         self.data_reader = CALIPSOReader(self.filepath)
         
         # Get lat and lon on the whole granule
-        self.lon_granule = np.copy(self.data_reader.get_data('Longitude'))
-        self.lat_granule = np.copy(self.data_reader.get_data('Latitude'))
+        self.lon_granule = self.data_reader.get_data('Longitude').copy()
+        self.lat_granule = self.data_reader.get_data('Latitude').copy()
         
         # Get prof_min and prof_max from 333 m resolution lat/lon
         if self.product not in PRODUCT_H_RESOLUTION['333m']:
@@ -316,8 +413,8 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
                 self._lon_granule_l1 = cal_l1.data_reader.get_data('Longitude')
                 self._lat_granule_l1 = cal_l1.data_reader.get_data('Latitude')
         else:
-            self._lon_granule_l1 = np.copy(self.lon_granule)
-            self._lat_granule_l1 = np.copy(self.lat_granule)
+            self._lon_granule_l1 = self.lon_granule.copy()
+            self._lat_granule_l1 = self.lat_granule.copy()
 
         if slice_start_end_type=='profindex':
             if slice_start is not None:
@@ -336,10 +433,10 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
                                                                              slice_end)
         else:
             raise Exception(MESSAGE_EXECPTION_SLICE_START_END_TYPE)
-        self.lon_min = self._lon_granule_l1[self.prof_min]
-        self.lat_min = self._lat_granule_l1[self.prof_min]
-        self.lon_max = self._lon_granule_l1[self.prof_max]
-        self.lat_max = self._lat_granule_l1[self.prof_max]
+        self.lon_min = self._lon_granule_l1.isel(profile=self.prof_min).item()
+        self.lat_min = self._lat_granule_l1.isel(profile=self.prof_min).item()
+        self.lon_max = self._lon_granule_l1.isel(profile=self.prof_max).item()
+        self.lat_max = self._lat_granule_l1.isel(profile=self.prof_max).item()
         self.nb_profiles = self.prof_max - self.prof_min + 1
 
     def close(self):
@@ -359,10 +456,10 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         selected = copy(self)
         selected.prof_min = int(profile_start)
         selected.prof_max = int(profile_end)
-        selected.lon_min = selected._lon_granule_l1[selected.prof_min]
-        selected.lat_min = selected._lat_granule_l1[selected.prof_min]
-        selected.lon_max = selected._lon_granule_l1[selected.prof_max]
-        selected.lat_max = selected._lat_granule_l1[selected.prof_max]
+        selected.lon_min = selected._lon_granule_l1.isel(profile=selected.prof_min).item()
+        selected.lat_min = selected._lat_granule_l1.isel(profile=selected.prof_min).item()
+        selected.lon_max = selected._lon_granule_l1.isel(profile=selected.prof_max).item()
+        selected.lat_max = selected._lat_granule_l1.isel(profile=selected.prof_max).item()
         selected.nb_profiles = selected.prof_max - selected.prof_min + 1
         selected._molecular_profiles = {
             "532": None,
@@ -386,12 +483,12 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         
         :param key: a CALIPSO parameter
         :param do_fillvalue: mask where fillvalue
-        :return: (masked) data array
+        :return: labelled xarray data array
         """
         if (key == 'Latitude') and (self.product not in PRODUCT_H_RESOLUTION['333m']):
-            data = np.copy(self._lat_granule_l1)
+            data = self._lat_granule_l1.copy()
         elif (key == 'Longitude') and (self.product not in PRODUCT_H_RESOLUTION['333m']):
-            data = np.copy(self._lon_granule_l1)
+            data = self._lon_granule_l1.copy()
         elif key in self.data_reader.get_cal_keys():
             var_of_profiles = self.data_reader.is_profile_variable(key)
             reads_native_slice = (
@@ -441,8 +538,9 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
             except:
                 key_is_layer_var = False
             if key_is_layer_var:
-                alt_base = self.data_reader.get_data("Layer_Base_Altitude", None, None, 'profindex', do_fillvalue)
-                alt_top = self.data_reader.get_data("Layer_Top_Altitude", None, None, 'profindex', do_fillvalue)
+                alt_base = as_masked_array(self.data_reader.get_data("Layer_Base_Altitude", None, None, 'profindex', do_fillvalue))
+                alt_top = as_masked_array(self.data_reader.get_data("Layer_Top_Altitude", None, None, 'profindex', do_fillvalue))
+                data = as_masked_array(data)
                 if self.product in PRODUCT_H_RESOLUTION['333m']:
                     alt_base = alt_base[self.prof_min:self.prof_max+1, :]
                     alt_top = alt_top[self.prof_min:self.prof_max+1, :]
@@ -533,6 +631,10 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         else:
             raise Exception(f"Error: unknown key = {key}.\n")
 
+        attributes = data.attrs.copy() if isinstance(data, xr.DataArray) else {}
+        if isinstance(data, xr.DataArray):
+            data = as_masked_array(data) if do_fillvalue else data.values
+
         # Put on regular grid (new resolution but grid stays 300m×30m) 
         if key == "Lidar_Data_Altitudes":
             if data.size == NUMBER_OF_VERTICAL_BINS:
@@ -577,10 +679,62 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
             raise Exception(f"Error: key = {key} with ndim ≥ 3 not implemented yet.\n")
         
 
-        return data
+        return self._as_dataarray(key, data, attributes)
+
+    def _as_dataarray(self, key, data, attributes=None):
+        """Return regular-grid data with stable dimensions and coordinates."""
+
+        if isinstance(data, xr.DataArray):
+            data = data.values
+        if data.ndim == 0:
+            dims = ()
+            coords = {}
+        elif key in {"Lidar_Data_Altitudes", "Lidar_Data_Altitudes_init"}:
+            dims = ("altitude",)
+            coords = {"altitude": np.arange(data.shape[0])}
+        elif key == "Met_Data_Altitudes":
+            dims = ("met_altitude",)
+            coords = {"met_altitude": np.arange(data.shape[0])}
+        elif data.ndim == 1:
+            dims = ("profile",)
+            coords = {
+                "profile": np.arange(
+                    self.prof_min,
+                    self.prof_min + data.shape[0],
+                    dtype=int,
+                )
+            }
+        elif data.ndim == 2:
+            vertical_dimension = (
+                "met_altitude"
+                if data.shape[1] == NUMBER_OF_VERTICAL_BINS_MET
+                else "altitude"
+            )
+            dims = ("profile", vertical_dimension)
+            coords = {
+                "profile": np.arange(
+                    self.prof_min,
+                    self.prof_min + data.shape[0],
+                    dtype=int,
+                ),
+                vertical_dimension: np.arange(data.shape[1]),
+            }
+        else:
+            dims = tuple(f"{key.lower()}_dim_{axis}" for axis in range(data.ndim))
+            coords = {}
+        return xr.DataArray(
+            data,
+            dims=dims,
+            coords=coords,
+            name=key,
+            attrs=attributes or {},
+        )
     
     def layer2grid(self, data, alt_base, alt_top):
         """Replace layer properties in a grid using base and top altitudes"""
+        data = as_masked_array(data)
+        alt_base = as_masked_array(alt_base)
+        alt_top = as_masked_array(alt_top)
         lidar_data_altitudes = LIDAR_DATA_ALTITUDES
         if lidar_data_altitudes is None:
             try:
@@ -592,6 +746,7 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
                     "Lidar_Data_Altitudes is required to regrid layer data."
                 ) from exc
 
+        lidar_data_altitudes = as_masked_array(lidar_data_altitudes)
         data_grid = np.ma.ones((alt_base.shape[0], NUMBER_OF_VERTICAL_BINS))*FILL_VALUE_FLOAT
         for i_prof in np.arange(alt_base.shape[0]):
             for i_layer in np.arange(alt_base.shape[1]):

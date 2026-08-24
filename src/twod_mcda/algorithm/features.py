@@ -1,6 +1,7 @@
 """Orchestrate the successive 2D-McDA feature-detection levels."""
 
 import numpy as np
+import xarray as xr
 
 from twod_mcda.algorithm.attenuation import transmission_correction
 from twod_mcda.algorithm.filtering import (
@@ -22,6 +23,7 @@ from twod_mcda.algorithm.parameters import (
     get_feature_detection_coef,
 )
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
+from twod_mcda.caliop.xarray_utils import as_masked_array
 from twod_mcda.utils.timing import timer
 
 
@@ -323,17 +325,43 @@ def detect_features_in_3_channels(data, surface_indexes):
         transmittance_name,
     ) in channel_inputs:
         with timer(f"Feature detection at {channel}"):
+            template = data[attenuated_name]
             mask, steps, ratio_steps, transmittance = detect_features(
-                data[attenuated_name] / data[molecular_attenuated_name],
-                data[uncertainty_name],
-                data[molecular_name],
-                data["Temperature"],
-                surface_indexes[channel],
+                as_masked_array(template / data[molecular_attenuated_name]),
+                as_masked_array(data[uncertainty_name]),
+                as_masked_array(data[molecular_name]),
+                as_masked_array(data["Temperature"]),
+                as_masked_array(surface_indexes[channel]),
                 channel,
             )
-            masks[mask_name] = mask
-            development[steps_name] = steps
-            development[ratio_steps_name] = ratio_steps
-            development[transmittance_name] = transmittance
+            base_coords = {
+                "profile": template.coords["profile"],
+                "altitude": template.coords["altitude"],
+            }
+            masks[mask_name] = xr.DataArray(
+                np.ma.asarray(mask).filled(0).astype(np.uint8, copy=False),
+                dims=("profile", "altitude"),
+                coords=base_coords,
+            )
+            step_dimension = f"step_{channel}"
+            step_coords = {
+                step_dimension: np.arange(steps.shape[0]),
+                **base_coords,
+            }
+            development[steps_name] = xr.DataArray(
+                np.ma.asarray(steps).filled(0).astype(np.uint8, copy=False),
+                dims=(step_dimension, "profile", "altitude"),
+                coords=step_coords,
+            )
+            development[ratio_steps_name] = xr.DataArray(
+                ratio_steps,
+                dims=(step_dimension, "profile", "altitude"),
+                coords=step_coords,
+            )
+            development[transmittance_name] = xr.DataArray(
+                transmittance,
+                dims=("profile", "altitude"),
+                coords=base_coords,
+            )
 
-    return masks, development
+    return xr.Dataset(masks), xr.Dataset(development)

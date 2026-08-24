@@ -1,6 +1,7 @@
 """Plan profile slices and trim adjacent-granule context."""
 
 import numpy as np
+import xarray as xr
 
 
 def plan_slices(
@@ -57,8 +58,8 @@ def trim_profiles(array, profile_count, side):
 
     Parameters
     ----------
-    array : numpy.ndarray
-        Array containing a profile dimension.
+    array : xarray.DataArray or xarray.Dataset
+        Labelled object containing a ``profile`` dimension.
     profile_count : int
         Number of profiles to remove.
     side : {"start", "end"}
@@ -66,14 +67,24 @@ def trim_profiles(array, profile_count, side):
 
     Returns
     -------
-    numpy.ndarray
-        Trimmed view of the input array.
+    xarray.DataArray or xarray.Dataset
+        Trimmed view of the input object.
     """
 
     if side not in {"start", "end"}:
         raise ValueError(
             f"Invalid side {side!r}. Expected 'start' or 'end'."
         )
+
+    if isinstance(array, (xr.DataArray, xr.Dataset)):
+        if "profile" not in array.dims:
+            return array
+        indexer = (
+            slice(profile_count, None)
+            if side == "start"
+            else slice(None, -profile_count)
+        )
+        return array.isel(profile=indexer)
 
     if array.ndim == 1:
         profile_axis = 0
