@@ -1,0 +1,8 @@
+netcdf_path: null
+l1_path: null
+common_config_path: config/common.yaml
+
+plot:
+  width: 500
+  height: 280
+  altitude_range: null
