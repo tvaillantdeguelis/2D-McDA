@@ -1,8 +1,10 @@
-netcdf_path: null
+product_directory: data/output/2D_McDA.v2.3.1
+granule: "2018-08-31T21-33-53ZN_lon_67.00_60.00"
 l1_path: null
 common_config_path: config/common.yaml
 
 plot:
   width: 500
   height: 280
+  longitude_range: [62.70, 61.30]
   altitude_range: null
