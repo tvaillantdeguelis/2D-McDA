@@ -208,7 +208,7 @@ The launcher creates complete run configurations under `runs/case_studies/`. Eac
 
 ### 4.4 Interactive visualization
 
-The interactive notebook under `visualization/` displays the four 2D-McDA masks together with the corresponding CALIOP Level 1 attenuated-backscatter signals at 333 m × 30 m and 5 km × 60 m resolution. All twelve panels share their profile and altitude ranges, so zooming or panning one panel updates the complete layout.
+The interactive notebook under `visualization/` displays the four 2D-McDA masks together with the corresponding CALIOP Level 1 attenuated-backscatter signals, the CALIOP VFM, and a map of the complete granule and plotted section. All twelve panels share their profile and altitude ranges, so zooming or panning one panel updates the complete layout.
 
 Create a local viewer configuration before opening the notebook:
 
@@ -219,20 +219,24 @@ cp visualization/config.example.yaml visualization/config.yaml
 Edit `visualization/config.yaml` as needed:
 
 ```yaml
-netcdf_path: /path/to/CAL_LID_L2_2D_McDA.nc
+product_directory: data/output/2D_McDA.v2.3.0-dirty
+granule: "2018-08-31T21-33-53ZN_lon_67.00_60.00"
 l1_path: null
 common_config_path: config/common.yaml
 
 plot:
   width: 500
   height: 280
+  longitude_range: [67.00, 60.00]
   altitude_range: [0, 30]
 ```
 
-- `netcdf_path`: 2D-McDA NetCDF product to display. Leave it as `null` to select the most recently modified NetCDF file below `data/output`.
+- `product_directory`: directory containing one version of the 2D-McDA output product. The viewer searches this directory recursively but never selects a product according to its modification time.
+- `granule`: required suffix identifying the 2D-McDA NetCDF file. It may identify the complete granule, for example `2018-08-31T21-33-53ZN`, or include the processed longitude bounds, for example `2018-08-31T21-33-53ZN_lon_67.00_60.00`. The combination of `product_directory` and `granule` must match exactly one NetCDF file.
 - `l1_path`: corresponding CALIOP Level 1 HDF file. Leave it as `null` to locate the file automatically from its timestamp and the CALIOP archive described by `common_config_path`.
 - `common_config_path`: processing configuration containing `cal_lid_l1.root_directory`, `cal_lid_l1.version`, and `cal_lid_l1.path_format`.
 - `plot.width` and `plot.height`: dimensions in pixels of each interactive panel.
+- `plot.longitude_range`: required pair of longitude bounds. The nearest profiles define the initial horizontal limits of all twelve panels and the highlighted section on the map.
 - `plot.altitude_range`: initial altitude limits in kilometres, or `null` to display the complete vertical range.
 
 Relative paths are resolved from the repository root. `visualization/config.yaml` is ignored by Git, while `visualization/config.example.yaml` is tracked and provides the portable defaults.
