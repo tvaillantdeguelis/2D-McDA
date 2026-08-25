@@ -30,6 +30,7 @@ runs/*
 .vscode/*
 test/*
 notebooks/*
+tmp/*
 
 # Temporary files
 *.tmp
