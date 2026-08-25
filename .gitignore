@@ -29,6 +29,7 @@ logs/*
 runs/*
 .vscode/*
 test/*
+notebooks/*
 
 # Temporary files
 *.tmp
