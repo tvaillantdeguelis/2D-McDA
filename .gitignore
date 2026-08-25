@@ -39,6 +39,7 @@ test/*
 # Local copies of example configs
 config/*.yaml
 !config/*.example.yaml
+visualization/config.yaml
 
 # Agents
 AGENTS.md

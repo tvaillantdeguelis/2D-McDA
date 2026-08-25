@@ -9,7 +9,17 @@ dependencies:
   - scipy
   - numba
   - matplotlib
+  - seaborn
+  - holoviews
+  - hvplot
+  - panel
+  - bokeh
+  - jupyterlab
+  - jupyter_bokeh
+  - ipykernel
   - pyhdf
   - netcdf4
   - pyyaml
   - pip
+  - pip:
+      - cmlidar
