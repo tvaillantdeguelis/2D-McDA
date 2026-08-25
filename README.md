@@ -206,6 +206,43 @@ python scripts/submit_case_studies.py config/case_studies.yaml
 
 The launcher creates complete run configurations under `runs/case_studies/`. Each case study defines its granule and the `mode`, `start`, and `end` bounds of its active subset.
 
+### 4.4 Interactive visualization
+
+The interactive notebook under `visualization/` displays the four 2D-McDA masks together with the corresponding CALIOP Level 1 attenuated-backscatter signals at 333 m × 30 m and 5 km × 60 m resolution. All twelve panels share their profile and altitude ranges, so zooming or panning one panel updates the complete layout.
+
+Create a local viewer configuration before opening the notebook:
+
+```bash
+cp visualization/config.example.yaml visualization/config.yaml
+```
+
+Edit `visualization/config.yaml` as needed:
+
+```yaml
+netcdf_path: /path/to/CAL_LID_L2_2D_McDA.nc
+l1_path: null
+common_config_path: config/common.yaml
+
+plot:
+  width: 500
+  height: 280
+  altitude_range: [0, 30]
+```
+
+- `netcdf_path`: 2D-McDA NetCDF product to display. Leave it as `null` to select the most recently modified NetCDF file below `data/output`.
+- `l1_path`: corresponding CALIOP Level 1 HDF file. Leave it as `null` to locate the file automatically from its timestamp and the CALIOP archive described by `common_config_path`.
+- `common_config_path`: processing configuration containing `cal_lid_l1.root_directory`, `cal_lid_l1.version`, and `cal_lid_l1.path_format`.
+- `plot.width` and `plot.height`: dimensions in pixels of each interactive panel.
+- `plot.altitude_range`: initial altitude limits in kilometres, or `null` to display the complete vertical range.
+
+Relative paths are resolved from the repository root. `visualization/config.yaml` is ignored by Git, while `visualization/config.example.yaml` is tracked and provides the portable defaults.
+
+Start JupyterLab and open the viewer:
+
+```bash
+conda run -n twod-mcda jupyter lab visualization/2d_mcda_interactive_viewer.ipynb
+```
+
 ## 5. Author
 
 **Thibault Vaillant de Guélis**
