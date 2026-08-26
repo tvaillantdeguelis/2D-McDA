@@ -5,6 +5,9 @@
 
 from datetime import datetime
 import numpy as np
+import xarray as xr
+
+from twod_mcda.caliop.xarray_utils import as_masked_array
 
 
 # Global variables
@@ -47,6 +50,10 @@ def merged_feature_masks(mask_532_par, mask_532_per, mask_1064):
     """Merged the feature masks from the 3 channels"""
 
     tic_function = datetime.now()
+    template = mask_532_par if isinstance(mask_532_par, xr.DataArray) else None
+    mask_532_par = as_masked_array(mask_532_par)
+    mask_532_per = as_masked_array(mask_532_per)
+    mask_1064 = as_masked_array(mask_1064)
 
     # Check if flag values not declared in global variables
     if not np.all((mask_532_par <= max_flag_detect) |\
@@ -139,4 +146,11 @@ def merged_feature_masks(mask_532_par, mask_532_per, mask_1064):
 
     print(f'\t(Elapsed time: {datetime.now() - tic_function})')
 
-    return merged_mask
+    if template is None:
+        return merged_mask
+    return xr.DataArray(
+        merged_mask,
+        dims=template.dims,
+        coords=template.coords,
+        name="Composite_Detection_Flags",
+    )

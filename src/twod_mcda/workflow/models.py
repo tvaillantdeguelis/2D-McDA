@@ -3,10 +3,10 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
+import xarray as xr
 
 
-ArrayMapping = dict[str, np.ndarray]
+ArrayMapping = xr.Dataset
 
 
 @dataclass(frozen=True)
@@ -31,13 +31,14 @@ class ProcessingRequest:
     maximum_altitude_km: int
     maximum_altitude_index: int | None
 
+
 @dataclass
 class SliceData:
     """Input and output arrays associated with one processing slice."""
 
-    input: ArrayMapping
-    masks: ArrayMapping = field(default_factory=dict)
-    development: ArrayMapping = field(default_factory=dict)
+    input: xr.Dataset
+    masks: xr.Dataset = field(default_factory=xr.Dataset)
+    development: xr.Dataset = field(default_factory=xr.Dataset)
     previous_context_count: int = 0
     next_context_count: int = 0
 
@@ -46,8 +47,8 @@ class SliceData:
 class ProcessingResult:
     """Arrays needed to write the final 2D-McDA product."""
 
-    data: ArrayMapping
-    development: ArrayMapping
-    altitude: np.ndarray
+    data: xr.Dataset
+    development: xr.Dataset
+    altitude: xr.DataArray
     longitude_min: float
     longitude_max: float

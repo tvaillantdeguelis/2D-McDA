@@ -1,7 +1,7 @@
 """Low-level HDF4 reader used by the CALIOP adapter."""
 
 import pyhdf.VS
-import numpy as np
+import xarray as xr
 
 from pyhdf.HDF import HDF
 from pyhdf.SD import SD
@@ -98,17 +98,44 @@ class HDF4Reader:
         dataset = self._sd_interface.select(key)
         try:
             data = dataset.get(start=start, count=count, stride=stride)
+            attributes = dataset.attributes()
+            dimensions = self._dimension_names(dataset, data.ndim)
         except HDF4Error:
             print("Error: '%s' is not in %s." % (key, self.file_path))
             raise
         finally:
             dataset.endaccess()
 
-        data = np.asanyarray(data)
+        array = xr.DataArray(
+            data,
+            dims=dimensions,
+            name=key,
+            attrs=attributes,
+        )
         if do_squeeze:
-            data = data.squeeze()
+            array = array.squeeze(drop=True)
 
-        return data
+        return array
+
+    @staticmethod
+    def _dimension_names(dataset, ndim):
+        """Read HDF dimension labels, with deterministic names as fallback."""
+
+        dimensions = []
+        for axis in range(ndim):
+            fallback = f"hdf_dim_{axis}"
+            try:
+                name = dataset.dim(axis).info()[0]
+            except (AttributeError, HDF4Error, IndexError, TypeError):
+                name = fallback
+            if isinstance(name, bytes):
+                name = name.decode("utf-8", errors="replace")
+            if not isinstance(name, str):
+                name = fallback
+            if not name or name in dimensions:
+                name = fallback
+            dimensions.append(name)
+        return tuple(dimensions)
     
     def get_fillvalue(self, key):
         dataset = self._sd_interface.select(key)

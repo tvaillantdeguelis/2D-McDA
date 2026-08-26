@@ -90,8 +90,20 @@ CALIOP_L1_VARIABLE_DIMS = {
     "Latitude": ("profile",),
     "Longitude": ("profile",),
     "Lidar_Data_Altitudes": ("lidar_altitude",),
+    "Met_Data_Altitudes": ("met_altitude",),
+    "Profile_ID": ("profile",),
+    "Profile_Time": ("profile",),
+    "Profile_UTC_Time": ("profile",),
     "Total_Attenuated_Backscatter_532": (
         "profile",
         "lidar_altitude",
     ),
+    "Perpendicular_Attenuated_Backscatter_532": ("profile", "lidar_altitude"),
+    "Attenuated_Backscatter_1064": ("profile", "lidar_altitude"),
+    "Molecular_Number_Density": ("profile", "met_altitude"),
+    "Ozone_Number_Density": ("profile", "met_altitude"),
+    "Temperature": ("profile", "met_altitude"),
 }
+
+for _name in CALIOP_L1_NATIVE_VARIABLES:
+    CALIOP_L1_VARIABLE_DIMS.setdefault(_name, ("profile",))

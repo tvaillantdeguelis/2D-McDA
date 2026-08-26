@@ -2,12 +2,14 @@
 # coding: utf8
 
 import numpy as np
+import xarray as xr
 
 from twod_mcda.caliop.physics import (
     range_from_altitude,
     rms_from_P_domain_to_betap_domain,
 )
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
+from twod_mcda.caliop.xarray_utils import as_masked_array
 from twod_mcda.algorithm.parameters import SurfaceDetectionParameters
 from twod_mcda.utils.timing import timer
 
@@ -214,54 +216,62 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
 def detect_surface_in_3_channels(data):
     """Return surface indexes for the three lidar channels."""
 
+    values = {
+        name: as_masked_array(data[name])
+        for name in data.variables
+    }
+
     common = (
-        data["IGBP_Surface_Type"],
-        data["Surface_Elevation"],
-        data["Spacecraft_Altitude"],
-        data["Lidar_Data_Altitudes"],
+        values["IGBP_Surface_Type"],
+        values["Surface_Elevation"],
+        values["Spacecraft_Altitude"],
+        values["Lidar_Data_Altitudes"],
     )
 
     with timer("Surface detection at 532_par"):
         parallel = detect_surface(
-            data["Parallel_Attenuated_Backscatter_532"],
+            values["Parallel_Attenuated_Backscatter_532"],
             *common,
-            data["Parallel_RMS_Baseline_532"],
-            data["Laser_Energy_532"],
-            data["Calibration_Constant_532"],
+            values["Parallel_RMS_Baseline_532"],
+            values["Laser_Energy_532"],
+            values["Calibration_Constant_532"],
             1,
-            data["Parallel_Amplifier_Gain_532"],
-            data["Off_Nadir_Angle"],
+            values["Parallel_Amplifier_Gain_532"],
+            values["Off_Nadir_Angle"],
             "532_par",
         )
 
     with timer("Surface detection at 532_per"):
         perpendicular = detect_surface(
-            data["Perpendicular_Attenuated_Backscatter_532"],
+            values["Perpendicular_Attenuated_Backscatter_532"],
             *common,
-            data["Perpendicular_RMS_Baseline_532"],
-            data["Laser_Energy_532"],
-            data["Calibration_Constant_532"],
-            data["Depolarization_Gain_Ratio_532"],
-            data["Perpendicular_Amplifier_Gain_532"],
-            data["Off_Nadir_Angle"],
+            values["Perpendicular_RMS_Baseline_532"],
+            values["Laser_Energy_532"],
+            values["Calibration_Constant_532"],
+            values["Depolarization_Gain_Ratio_532"],
+            values["Perpendicular_Amplifier_Gain_532"],
+            values["Off_Nadir_Angle"],
             "532_per",
         )
 
     with timer("Surface detection at 1064"):
         infrared = detect_surface(
-            data["Attenuated_Backscatter_1064"],
+            values["Attenuated_Backscatter_1064"],
             *common,
-            data["RMS_Baseline_1064"],
-            data["Laser_Energy_1064"],
-            data["Calibration_Constant_1064"],
+            values["RMS_Baseline_1064"],
+            values["Laser_Energy_1064"],
+            values["Calibration_Constant_1064"],
             1,
-            data["Amplifier_Gain_1064"],
-            data["Off_Nadir_Angle"],
+            values["Amplifier_Gain_1064"],
+            values["Off_Nadir_Angle"],
             "1064",
         )
 
-    return {
-        "532_par": parallel,
-        "532_per": perpendicular,
-        "1064": infrared,
-    }
+    coords = {"profile": data.coords["profile"]}
+    return xr.Dataset(
+        {
+            "532_par": xr.DataArray(parallel, dims=("profile",), coords=coords),
+            "532_per": xr.DataArray(perpendicular, dims=("profile",), coords=coords),
+            "1064": xr.DataArray(infrared, dims=("profile",), coords=coords),
+        }
+    )
