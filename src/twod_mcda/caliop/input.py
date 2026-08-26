@@ -1,4 +1,6 @@
-"""Load the CALIOP arrays required by the unchanged 2D-McDA algorithm."""
+"""Load CALIOP variables into labelled xarray datasets."""
+
+import xarray as xr
 
 from twod_mcda.caliop.reader import CALIOPRegularGridReader
 from twod_mcda.caliop.constants import CALIOP_L1_PRODUCT_TYPE
@@ -33,7 +35,20 @@ def read_slice(granule, profile_start, profile_end):
     """Read and derive the detector inputs for one profile slice."""
 
     reader = granule.select_profiles(profile_start, profile_end)
-    return {
+    arrays = {
         variable: reader.get_data(variable)
         for variable in CALIOP_L1_PROCESSING_VARIABLES
     }
+    altitude = arrays["Lidar_Data_Altitudes"]
+    altitude_values = altitude.values
+    arrays["Lidar_Data_Altitudes"] = altitude.assign_coords(
+        altitude=altitude_values
+    )
+    for name, array in arrays.items():
+        if "altitude" in array.dims:
+            arrays[name] = array.assign_coords(altitude=altitude_values)
+
+    dataset = xr.Dataset(arrays)
+    return dataset.set_coords(
+        ["Latitude", "Longitude", "Lidar_Data_Altitudes"]
+    )

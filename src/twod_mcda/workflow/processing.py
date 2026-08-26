@@ -17,11 +17,13 @@ def _trim_neighbor_profiles(slice_data):
         if profile_count == 0:
             continue
         print(f"\n\n*****Remove context from {side} adjacent file...*****")
-        for mapping in (slice_data.input, slice_data.masks, slice_data.development):
-            for name, values in mapping.items():
-                if name == "Lidar_Data_Altitudes":
-                    continue
-                mapping[name] = trim_profiles(values, profile_count, side)
+        slice_data.input = trim_profiles(slice_data.input, profile_count, side)
+        slice_data.masks = trim_profiles(slice_data.masks, profile_count, side)
+        slice_data.development = trim_profiles(
+            slice_data.development,
+            profile_count,
+            side,
+        )
 
 
 def process_slice(slice_data):

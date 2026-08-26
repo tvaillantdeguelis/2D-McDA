@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from netCDF4 import Dataset
 import numpy as np
+import xarray as xr
 
 
 @dataclass
@@ -14,7 +15,7 @@ class NetCDFVariable:
     """Description of one variable in a netCDF product."""
 
     name: str
-    data: np.ndarray
+    data: xr.DataArray | np.ndarray
     dimensions: tuple[str, ...] = ()
     fill_value: int | float | None = None
     attributes: dict[str, object] = field(default_factory=dict)
@@ -64,6 +65,17 @@ def _attributes(variable, dtype):
     return attributes
 
 
+def _storage_data(specification):
+    """Convert xarray missing values to the variable's netCDF fill value."""
+
+    data = np.asanyarray(specification.data)
+    if specification.fill_value is not None:
+        data = np.ma.masked_equal(data, specification.fill_value)
+        if data.dtype.kind in {"f", "c"}:
+            data = np.ma.masked_invalid(data)
+    return data
+
+
 def write_netcdf(filename, variables, global_attributes=None):
     """Write variables atomically in netCDF-4 format.
 
@@ -87,7 +99,7 @@ def write_netcdf(filename, variables, global_attributes=None):
                 dataset.createDimension(name, size)
 
             for specification in variables:
-                data = np.asanyarray(specification.data)
+                data = _storage_data(specification)
                 options = {"fill_value": specification.fill_value}
                 if specification.compress and data.ndim and data.size > 1:
                     options.update(

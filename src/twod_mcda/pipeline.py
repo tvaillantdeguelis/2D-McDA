@@ -7,6 +7,7 @@ import re
 import time
 
 import numpy as np
+import xarray as xr
 
 from .caliop.constants import FILL_VALUE_FLOAT
 from .caliop.discovery import find_granule_file, find_neighbor_granules
@@ -310,28 +311,51 @@ def _slice_description(
     )
 
 
-def _empty_output(profile_count, altitude_count):
-    """Allocate arrays with the product dtypes and fill values."""
+def _empty_output(profile_count, altitude, profile_start=0):
+    """Allocate an xarray product dataset with named coordinates."""
 
-    return {
-        "Profile_ID": np.ones(profile_count, dtype=np.int32) * FILL_VALUE_FLOAT,
-        "Profile_Time": np.ones(profile_count, dtype=np.float64) * FILL_VALUE_FLOAT,
-        "Profile_UTC_Time": np.ones(profile_count, dtype=np.float64) * FILL_VALUE_FLOAT,
-        "Latitude": np.ma.ones(profile_count, dtype=np.float32) * FILL_VALUE_FLOAT,
-        "Longitude": np.ma.ones(profile_count, dtype=np.float32) * FILL_VALUE_FLOAT,
-        "Parallel_Detection_Flags_532": np.zeros(
-            (profile_count, altitude_count), dtype=np.uint8
-        ),
-        "Perpendicular_Detection_Flags_532": np.zeros(
-            (profile_count, altitude_count), dtype=np.uint8
-        ),
-        "Detection_Flags_1064": np.zeros(
-            (profile_count, altitude_count), dtype=np.uint8
-        ),
-        "Composite_Detection_Flags": np.zeros(
-            (profile_count, altitude_count), dtype=np.uint8
-        ),
+    if np.isscalar(altitude):
+        altitude_values = np.arange(int(altitude))
+    else:
+        altitude_values = np.asarray(altitude)
+    coords = {
+        "profile": np.arange(profile_start, profile_start + profile_count),
+        "altitude": altitude_values,
     }
+    profile_dims = ("profile",)
+    grid_dims = ("profile", "altitude")
+    return xr.Dataset(
+        {
+            "Profile_ID": xr.DataArray(
+                np.full(profile_count, int(FILL_VALUE_FLOAT), dtype=np.int32),
+                dims=profile_dims,
+            ),
+            "Profile_Time": xr.DataArray(
+                np.full(profile_count, FILL_VALUE_FLOAT, dtype=np.float64),
+                dims=profile_dims,
+            ),
+            "Profile_UTC_Time": xr.DataArray(
+                np.full(profile_count, FILL_VALUE_FLOAT, dtype=np.float64),
+                dims=profile_dims,
+            ),
+            "Latitude": xr.DataArray(
+                np.full(profile_count, FILL_VALUE_FLOAT, dtype=np.float32),
+                dims=profile_dims,
+            ),
+            "Longitude": xr.DataArray(
+                np.full(profile_count, FILL_VALUE_FLOAT, dtype=np.float32),
+                dims=profile_dims,
+            ),
+            **{
+                name: xr.DataArray(
+                    np.zeros((profile_count, altitude_values.size), dtype=np.uint8),
+                    dims=grid_dims,
+                )
+                for name in DETECTION_MASKS
+            },
+        },
+        coords=coords,
+    )
 
 
 def _read_processing_slice(
@@ -348,32 +372,36 @@ def _read_processing_slice(
     granule_last_profile = granule.data_reader.nb_profiles - 1
 
     if profile_min == 0 and previous is not None:
-        time_gap = np.abs(data["Profile_Time"][0] - previous["Profile_Time"][-1])
+        first_time = data["Profile_Time"].isel(profile=0).item()
+        previous_time = previous["Profile_Time"].isel(profile=-1).item()
+        time_gap = np.abs(first_time - previous_time)
         print(
             "\tTime between last profile of previous file and first profile "
             f"of current file = {time_gap:.2f} s"
         )
-        if profiles_are_consecutive(previous["Profile_Time"][-1], data["Profile_Time"][0]):
+        if profiles_are_consecutive(previous_time, first_time):
             print("\tAppend previous granule")
             slice_data.input = append_adjacent_profiles(data, previous, "start")
-            slice_data.previous_context_count = previous["Profile_Time"].size
+            slice_data.previous_context_count = previous.sizes["profile"]
         else:
             print("\tPrevious granule does not seem consecutive. No start context added.")
 
     if profile_max == granule_last_profile and following is not None:
-        time_gap = np.abs(following["Profile_Time"][0] - data["Profile_Time"][-1])
+        following_time = following["Profile_Time"].isel(profile=0).item()
+        last_time = data["Profile_Time"].isel(profile=-1).item()
+        time_gap = np.abs(following_time - last_time)
         print(
             "\tTime between last profile of current file and first profile "
             f"of next file = {time_gap:.2f} s"
         )
-        if profiles_are_consecutive(data["Profile_Time"][-1], following["Profile_Time"][0]):
+        if profiles_are_consecutive(last_time, following_time):
             print("\tAppend next granule")
             slice_data.input = append_adjacent_profiles(
                 slice_data.input,
                 following,
                 "end",
             )
-            slice_data.next_context_count = following["Profile_Time"].size
+            slice_data.next_context_count = following.sizes["profile"]
         else:
             print("\tNext granule does not seem consecutive. No end context added.")
 
@@ -390,25 +418,26 @@ def _store_slice(
 ):
     """Store only the result interval, excluding its processing context."""
 
-    file_max = file_min + output[PROFILE_METADATA[0]].shape[0] - 1
+    file_max = file_min + output.sizes["profile"] - 1
+    expected_profiles = np.arange(file_min, file_max + 1)
+    if not np.array_equal(output.coords["profile"], expected_profiles):
+        output.coords["profile"] = expected_profiles
     copy_min = max(profile_min, file_min)
     copy_max = min(profile_max, file_max)
     if copy_min > copy_max:
         return
 
-    output_slice = slice(copy_min - file_min, copy_max - file_min + 1)
-    input_slice = slice(
-        copy_min - input_profile_min,
-        copy_max - input_profile_min + 1,
-    )
+    selected_profiles = slice(copy_min, copy_max)
 
     for name in PROFILE_METADATA:
-        output[name][output_slice] = np.copy(
-            slice_data.input[name][input_slice]
-        )
+        output[name].loc[{"profile": selected_profiles}] = slice_data.input[
+            name
+        ].sel(profile=selected_profiles)
 
     for name in DETECTION_MASKS:
-        output[name][output_slice, :] = slice_data.masks[name][input_slice, :]
+        output[name].loc[{"profile": selected_profiles}] = slice_data.masks[
+            name
+        ].sel(profile=selected_profiles)
 
 
 def _store_development(
@@ -428,44 +457,28 @@ def _store_development(
     if copy_min > copy_max:
         return
 
-    store_min = copy_min - file_min
-    store_max = copy_max - file_min + 1
-    input_min = copy_min - input_profile_min
-    input_max = copy_max - input_profile_min + 1
+    if "profile" not in output.coords:
+        output.coords["profile"] = np.arange(
+            file_min,
+            file_min + profile_count,
+        )
 
     for name, values in slice_development.items():
-        values = np.asanyarray(values)
-        if values.ndim == 2:
-            profile_axis = 0
-        elif values.ndim == 3:
-            profile_axis = 1
-        else:
+        if "profile" not in values.dims:
             raise ValueError(
                 f"Unsupported development array shape for {name!r}: "
                 f"{values.shape}."
             )
 
+        selected = values.sel(profile=slice(copy_min, copy_max))
         if name not in output:
-            shape = list(values.shape)
-            shape[profile_axis] = profile_count
             fill_value = FILL_VALUE_FLOAT if values.dtype.kind == "f" else 0
-            if np.ma.isMaskedArray(values):
-                output[name] = np.ma.masked_all(shape, dtype=values.dtype)
-                output[name].set_fill_value(fill_value)
-            else:
-                output[name] = np.full(shape, fill_value, dtype=values.dtype)
+            output[name] = values.reindex(
+                profile=output.coords["profile"],
+                fill_value=fill_value,
+            )
 
-        if profile_axis == 0:
-            output[name][store_min:store_max, :] = values[
-                input_min:input_max,
-                :,
-            ]
-        else:
-            output[name][:, store_min:store_max, :] = values[
-                :,
-                input_min:input_max,
-                :,
-            ]
+        output[name].loc[{"profile": selected.coords["profile"]}] = selected
 
 
 def assemble_results(output, development, altitude, granule):
@@ -497,7 +510,11 @@ def _execute_pipeline(request):
         nb_slices = profile_starts.size
         granule_last_profile = granule.data_reader.nb_profiles - 1
         altitude = granule.get_data("Lidar_Data_Altitudes")
-        output = _empty_output(profile_count, altitude.size)
+        output = _empty_output(
+            profile_count,
+            altitude.values,
+            granule.prof_min,
+        )
 
         _print_request(
             request,
@@ -513,7 +530,7 @@ def _execute_pipeline(request):
             ),
         )
 
-        development = {}
+        development = xr.Dataset(coords=output.coords)
         slices = zip(
             profile_starts,
             profile_ends,
