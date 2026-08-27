@@ -1,6 +1,5 @@
 """Top-level processing pipeline."""
 
-from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 import re
@@ -9,6 +8,9 @@ import time
 import numpy as np
 import xarray as xr
 
+from .algorithm.composite import merged_feature_masks
+from .algorithm.features import detect_features_in_channel
+from .algorithm.surface import detect_surface_in_channel
 from .caliop.constants import FILL_VALUE_FLOAT
 from .caliop.discovery import find_granule_file, find_neighbor_granules
 from .caliop.input import open_granule, read_slice
@@ -19,9 +21,8 @@ from .workflow.neighbors import (
     append_adjacent_profiles,
     profiles_are_consecutive,
 )
-from .workflow.processing import process_slice
 from .workflow.settings import NB_PROF_CONTEXT, NB_PROF_SLICE
-from .workflow.slicing import plan_slices
+from .workflow.slicing import plan_slices, trim_profiles
 from .version import get_full_version
 
 
@@ -152,19 +153,19 @@ def resolve_processing_request(cfg):
 
 def _print_request(
     request,
-    granule,
-    previous_granule,
-    next_granule,
+    current_granule,
+    previous_granule_path,
+    next_granule_path,
     profile_count,
-    nb_slices,
-    previous_context_count=0,
-    next_context_count=0,
+    slice_count,
+    previous_context_count,
+    next_context_count,
 ):
     """Print only the input and processing settings useful to the user."""
 
     if request.subset_active and request.subset_mode == "profindex":
-        subset_start = granule.prof_min
-        subset_end = granule.prof_max
+        subset_start = current_granule.prof_min
+        subset_end = current_granule.prof_max
         subset_limits_label = "Profile limits"
     elif request.subset_active:
         subset_start = request.subset_start
@@ -183,10 +184,10 @@ def _print_request(
         print("Subset mode            : false")
     print("#################################################")
 
-    print(f"\n=> Current L1 file to process :\n{granule.filepath}")
+    print(f"\n=> Current L1 file to process :\n{current_granule.filepath}")
 
     if previous_context_count:
-        if previous_granule is None:
+        if previous_granule_path is None:
             print(
                 "\n=> Previous L1 file: Not found. The algorithm will run "
                 "without start context and this may introduce artifacts in "
@@ -195,11 +196,11 @@ def _print_request(
         else:
             print(
                 "\n=> Previous L1 file (used to provide context at the "
-                f"start):\n{previous_granule.filepath}"
+                f"start):\n{previous_granule_path}"
             )
 
     if next_context_count:
-        if next_granule is None:
+        if next_granule_path is None:
             print(
                 "\n=> Next L1 file: Not found. The algorithm will run "
                 "without end context and this may introduce artifacts in "
@@ -208,90 +209,39 @@ def _print_request(
         else:
             print(
                 "\n=> Next L1 file (used to provide context at the end):"
-                f"\n{next_granule.filepath}"
+                f"\n{next_granule_path}"
             )
 
-    print(f"\nNumber of profiles to process: {profile_count} in {nb_slices} slices\n")
-
-
-def _open_inputs(request, stack):
-    """Open the current granule and any required neighboring context."""
-
-    granule = stack.enter_context(
-        open_granule(
-            request,
-            request.granule_date,
-            request.current_directory,
-            request.subset_start,
-            request.subset_end,
-            request.subset_mode,
-        )
-    )
-    (
-        profile_starts,
-        profile_ends,
-        context_starts,
-        context_ends,
-    ) = plan_slices(
-        granule.prof_min,
-        granule.prof_max,
-        NB_PROF_SLICE,
-        NB_PROF_CONTEXT,
-    )
-    granule_last_profile = granule.data_reader.nb_profiles - 1
-    previous_context_count = max(0, -int(context_starts[0]))
-    next_context_count = max(
-        0,
-        int(context_ends[-1]) - granule_last_profile,
+    print(
+        f"\nNumber of profiles to process: {profile_count} in "
+        f"{slice_count} slices\n"
     )
 
-    previous_granule = None
-    previous = None
-    if previous_context_count and request.previous_granule is not None:
-        previous_granule = stack.enter_context(
-            open_granule(
-                request,
-                request.previous_granule,
-                request.previous_directory,
-                -previous_context_count,
-                None,
-            )
-        )
-        previous = read_slice(
-            previous_granule,
-            previous_granule.prof_min,
-            previous_granule.prof_max,
-        )
 
-    next_granule = None
-    following = None
-    if next_context_count and request.next_granule is not None:
-        next_granule = stack.enter_context(
-            open_granule(
-                request,
-                request.next_granule,
-                request.next_directory,
-                None,
-                next_context_count - 1,
-            )
-        )
-        following = read_slice(
-            next_granule,
-            next_granule.prof_min,
-            next_granule.prof_max,
-        )
+def _read_adjacent_profiles(
+    request,
+    granule_date,
+    directory,
+    profile_start,
+    profile_end,
+):
+    """Load context profiles from one adjacent granule, then close its file."""
 
-    return (
-        granule,
-        previous_granule,
-        next_granule,
-        previous,
-        following,
-        profile_starts,
-        profile_ends,
-        context_starts,
-        context_ends,
-    )
+    with open_granule(
+        request,
+        granule_date,
+        directory,
+        profile_start,
+        profile_end,
+    ) as adjacent_granule:
+        adjacent_profiles = read_slice(
+            adjacent_granule,
+            adjacent_granule.prof_min,
+            adjacent_granule.prof_max,
+        )
+        adjacent_granule_path = adjacent_granule.filepath
+
+    return adjacent_profiles, adjacent_granule_path
 
 
 def _slice_description(
@@ -384,7 +334,10 @@ def _read_processing_slice(
             slice_data.input = append_adjacent_profiles(data, previous, "start")
             slice_data.previous_context_count = previous.sizes["profile"]
         else:
-            print("\tPrevious granule does not seem consecutive. No start context added.")
+            print(
+                "\tPrevious granule does not seem consecutive. "
+                "No start context added."
+            )
 
     if profile_max == granule_last_profile and following is not None:
         following_time = following["Profile_Time"].isel(profile=0).item()
@@ -493,117 +446,288 @@ def assemble_results(output, development, altitude, granule):
     )
 
 
-def _execute_pipeline(request):
-    with ExitStack() as stack:
-        (
-            granule,
-            previous_granule,
-            next_granule,
-            previous,
-            following,
-            profile_starts,
-            profile_ends,
-            context_starts,
-            context_ends,
-        ) = _open_inputs(request, stack)
-        profile_count = granule.prof_max - granule.prof_min + 1
-        nb_slices = profile_starts.size
-        granule_last_profile = granule.data_reader.nb_profiles - 1
-        altitude = granule.get_data("Lidar_Data_Altitudes")
-        output = _empty_output(
-            profile_count,
-            altitude.values,
-            granule.prof_min,
-        )
-
-        _print_request(
-            request,
-            granule,
-            previous_granule,
-            next_granule,
-            profile_count,
-            nb_slices,
-            previous_context_count=max(0, -int(context_starts[0])),
-            next_context_count=max(
-                0,
-                int(context_ends[-1]) - granule_last_profile,
-            ),
-        )
-
-        development = xr.Dataset(coords=output.coords)
-        slices = zip(
-            profile_starts,
-            profile_ends,
-            context_starts,
-            context_ends,
-        )
-        for index, (
-            profile_min,
-            profile_max,
-            context_min,
-            context_max,
-        ) in enumerate(
-            slices,
-            start=1,
-        ):
-            input_profile_min = max(int(context_min), 0)
-            input_profile_max = min(int(context_max), granule_last_profile)
-            description = _slice_description(
-                index,
-                nb_slices,
-                profile_min,
-                profile_max,
-                context_min,
-                context_max,
-            )
-            with timer(description):
-                with timer("Load slice data"):
-                    slice_data = _read_processing_slice(
-                        input_profile_min,
-                        input_profile_max,
-                        granule,
-                        previous,
-                        following,
-                    )
-                slice_data = process_slice(slice_data)
-                if request.save_development_data:
-                    _store_development(
-                        development,
-                        slice_data.development,
-                        profile_min,
-                        profile_max,
-                        input_profile_min,
-                        granule.prof_min,
-                        profile_count,
-                    )
-
-                print("\n\n*****Copy slice data to the whole data arrays...*****")
-                with timer("Copy slice data to the whole data arrays"):
-                    _store_slice(
-                        output,
-                        slice_data,
-                        profile_min,
-                        profile_max,
-                        input_profile_min,
-                        granule.prof_min,
-                    )
-
-        result = assemble_results(output, development, altitude, granule)
-
-    print("\n\n############################################################\n*****Save data in netCDF file...*****")
-    with timer("Save data in netCDF file"):
-        return write_product(request, result)
-
-
 def run_granule_pipeline(cfg):
-    """Resolve, process, and write one configured CALIOP granule."""
+    """Run the complete scientific pipeline for one CALIOP granule."""
 
     start_time = datetime.now().astimezone()
     start_tic = time.perf_counter()
     print(f"\nStart time: {start_time}")
 
-    request = resolve_processing_request(cfg)
-    output_path = _execute_pipeline(request)
+    # Step 1: locate the current CALIOP file and its neighboring files.
+    processing_request = resolve_processing_request(cfg)
+
+    # This ``with`` guarantees that the HDF file closes, even after an error.
+    with open_granule(
+        processing_request,
+        processing_request.granule_date,
+        processing_request.current_directory,
+        processing_request.subset_start,
+        processing_request.subset_end,
+        processing_request.subset_mode,
+    ) as current_granule:
+        # Step 2: divide the granule into slices with overlapping context.
+        (
+            profile_starts,
+            profile_ends,
+            context_starts,
+            context_ends,
+        ) = plan_slices(
+            current_granule.prof_min,
+            current_granule.prof_max,
+            NB_PROF_SLICE,
+            NB_PROF_CONTEXT,
+        )
+        profile_count = current_granule.prof_max - current_granule.prof_min + 1
+        slice_count = profile_starts.size
+        last_profile_in_file = current_granule.data_reader.nb_profiles - 1
+        previous_context_count = max(0, -int(context_starts[0]))
+        next_context_count = max(
+            0,
+            int(context_ends[-1]) - last_profile_in_file,
+        )
+
+        # Step 3: load neighboring profiles needed at the granule boundaries.
+        previous_profiles = None
+        previous_granule_path = None
+        if (
+            previous_context_count
+            and processing_request.previous_granule is not None
+        ):
+            previous_profiles, previous_granule_path = _read_adjacent_profiles(
+                processing_request,
+                processing_request.previous_granule,
+                processing_request.previous_directory,
+                -previous_context_count,
+                None,
+            )
+
+        next_profiles = None
+        next_granule_path = None
+        if (
+            next_context_count
+            and processing_request.next_granule is not None
+        ):
+            next_profiles, next_granule_path = _read_adjacent_profiles(
+                processing_request,
+                processing_request.next_granule,
+                processing_request.next_directory,
+                None,
+                next_context_count - 1,
+            )
+
+        _print_request(
+            processing_request,
+            current_granule,
+            previous_granule_path,
+            next_granule_path,
+            profile_count,
+            slice_count,
+            previous_context_count,
+            next_context_count,
+        )
+
+        # Step 4: allocate the datasets that will contain the whole granule.
+        altitude = current_granule.get_data("Lidar_Data_Altitudes")
+        granule_detection_product = _empty_output(
+            profile_count,
+            altitude.values,
+            current_granule.prof_min,
+        )
+        granule_development_data = xr.Dataset(
+            coords=granule_detection_product.coords
+        )
+
+        planned_slices = zip(
+            profile_starts,
+            profile_ends,
+            context_starts,
+            context_ends,
+        )
+        for slice_index, (
+            profile_min,
+            profile_max,
+            context_min,
+            context_max,
+        ) in enumerate(planned_slices, start=1):
+            first_profile_to_load = max(int(context_min), 0)
+            last_profile_to_load = min(
+                int(context_max),
+                last_profile_in_file,
+            )
+            description = _slice_description(
+                slice_index,
+                slice_count,
+                profile_min,
+                profile_max,
+                context_min,
+                context_max,
+            )
+
+            # ``timer`` only measures and prints the duration of this block.
+            with timer(description):
+                # Step 5: load the lidar and ancillary data for this slice.
+                with timer("Load slice data"):
+                    slice_data = _read_processing_slice(
+                        first_profile_to_load,
+                        last_profile_to_load,
+                        current_granule,
+                        previous_profiles,
+                        next_profiles,
+                    )
+                lidar_data = slice_data.input
+
+                # Step 6: detect the surface independently in each channel.
+                with timer("Surface detection at 532_par"):
+                    parallel_532_surface = detect_surface_in_channel(
+                        lidar_data,
+                        "532_par",
+                    )
+                with timer("Surface detection at 532_per"):
+                    perpendicular_532_surface = detect_surface_in_channel(
+                        lidar_data,
+                        "532_per",
+                    )
+                with timer("Surface detection at 1064"):
+                    infrared_1064_surface = detect_surface_in_channel(
+                        lidar_data,
+                        "1064",
+                    )
+
+                # Step 7: detect atmospheric features in the 532 nm parallel channel.
+                with timer("Feature detection at 532_par"):
+                    (
+                        parallel_532_detections,
+                        parallel_532_development,
+                    ) = detect_features_in_channel(
+                        lidar_data,
+                        parallel_532_surface,
+                        "532_par",
+                    )
+
+                # Step 8: detect features in the 532 nm perpendicular channel.
+                with timer("Feature detection at 532_per"):
+                    (
+                        perpendicular_532_detections,
+                        perpendicular_532_development,
+                    ) = detect_features_in_channel(
+                        lidar_data,
+                        perpendicular_532_surface,
+                        "532_per",
+                    )
+
+                # Step 9: detect atmospheric features in the 1064 nm channel.
+                with timer("Feature detection at 1064"):
+                    (
+                        infrared_1064_detections,
+                        infrared_1064_development,
+                    ) = detect_features_in_channel(
+                        lidar_data,
+                        infrared_1064_surface,
+                        "1064",
+                    )
+
+                slice_data.masks = xr.merge(
+                    [
+                        parallel_532_detections,
+                        perpendicular_532_detections,
+                        infrared_1064_detections,
+                    ]
+                )
+                slice_data.development = xr.merge(
+                    [
+                        parallel_532_development,
+                        perpendicular_532_development,
+                        infrared_1064_development,
+                    ]
+                )
+
+                # Step 10: remove profiles borrowed from neighboring granules.
+                if slice_data.previous_context_count:
+                    profiles_to_remove = slice_data.previous_context_count
+                    slice_data.input = trim_profiles(
+                        slice_data.input,
+                        profiles_to_remove,
+                        "start",
+                    )
+                    slice_data.masks = trim_profiles(
+                        slice_data.masks,
+                        profiles_to_remove,
+                        "start",
+                    )
+                    slice_data.development = trim_profiles(
+                        slice_data.development,
+                        profiles_to_remove,
+                        "start",
+                    )
+
+                if slice_data.next_context_count:
+                    profiles_to_remove = slice_data.next_context_count
+                    slice_data.input = trim_profiles(
+                        slice_data.input,
+                        profiles_to_remove,
+                        "end",
+                    )
+                    slice_data.masks = trim_profiles(
+                        slice_data.masks,
+                        profiles_to_remove,
+                        "end",
+                    )
+                    slice_data.development = trim_profiles(
+                        slice_data.development,
+                        profiles_to_remove,
+                        "end",
+                    )
+
+                # Step 11: combine the three channel masks into one composite mask.
+                with timer("Merged 3 channels feature detection"):
+                    slice_data.masks["Composite_Detection_Flags"] = (
+                        merged_feature_masks(
+                            slice_data.masks[
+                                "Parallel_Detection_Flags_532"
+                            ],
+                            slice_data.masks[
+                                "Perpendicular_Detection_Flags_532"
+                            ],
+                            slice_data.masks["Detection_Flags_1064"],
+                        )
+                    )
+
+                # Step 12: copy this slice into the whole-granule product.
+                if processing_request.save_development_data:
+                    _store_development(
+                        granule_development_data,
+                        slice_data.development,
+                        profile_min,
+                        profile_max,
+                        first_profile_to_load,
+                        current_granule.prof_min,
+                        profile_count,
+                    )
+                _store_slice(
+                    granule_detection_product,
+                    slice_data,
+                    profile_min,
+                    profile_max,
+                    first_profile_to_load,
+                    current_granule.prof_min,
+                )
+
+        # Step 13: gather all arrays and metadata needed by the NetCDF writer.
+        product_to_write = ProcessingResult(
+            data=granule_detection_product,
+            development=granule_development_data,
+            altitude=altitude,
+            longitude_min=current_granule.lon_min,
+            longitude_max=current_granule.lon_max,
+        )
+
+    # Step 14: write the final 2D-McDA NetCDF product.
+    print(
+        "\n\n############################################################"
+        "\n*****Save data in netCDF file...*****"
+    )
+    with timer("Save data in netCDF file"):
+        output_path = write_product(processing_request, product_to_write)
 
     end_time = datetime.now().astimezone()
     total_time = time.perf_counter() - start_tic

@@ -213,65 +213,83 @@ def detect_surface(ab, surf_type, est_surf_alt, alt_sat, alt, rms, energy, calib
     return i_surf
 
 
-def detect_surface_in_3_channels(data):
-    """Return surface indexes for the three lidar channels."""
-
-    values = {
-        name: as_masked_array(data[name])
-        for name in data.variables
-    }
+def detect_surface_in_channel(data, channel):
+    """Return the detected surface indexes for one lidar channel."""
 
     common = (
-        values["IGBP_Surface_Type"],
-        values["Surface_Elevation"],
-        values["Spacecraft_Altitude"],
-        values["Lidar_Data_Altitudes"],
+        as_masked_array(data["IGBP_Surface_Type"]),
+        as_masked_array(data["Surface_Elevation"]),
+        as_masked_array(data["Spacecraft_Altitude"]),
+        as_masked_array(data["Lidar_Data_Altitudes"]),
     )
 
-    with timer("Surface detection at 532_par"):
-        parallel = detect_surface(
-            values["Parallel_Attenuated_Backscatter_532"],
+    if channel == "532_par":
+        surface_indexes = detect_surface(
+            as_masked_array(data["Parallel_Attenuated_Backscatter_532"]),
             *common,
-            values["Parallel_RMS_Baseline_532"],
-            values["Laser_Energy_532"],
-            values["Calibration_Constant_532"],
+            as_masked_array(data["Parallel_RMS_Baseline_532"]),
+            as_masked_array(data["Laser_Energy_532"]),
+            as_masked_array(data["Calibration_Constant_532"]),
             1,
-            values["Parallel_Amplifier_Gain_532"],
-            values["Off_Nadir_Angle"],
+            as_masked_array(data["Parallel_Amplifier_Gain_532"]),
+            as_masked_array(data["Off_Nadir_Angle"]),
             "532_par",
         )
-
-    with timer("Surface detection at 532_per"):
-        perpendicular = detect_surface(
-            values["Perpendicular_Attenuated_Backscatter_532"],
+    elif channel == "532_per":
+        surface_indexes = detect_surface(
+            as_masked_array(data["Perpendicular_Attenuated_Backscatter_532"]),
             *common,
-            values["Perpendicular_RMS_Baseline_532"],
-            values["Laser_Energy_532"],
-            values["Calibration_Constant_532"],
-            values["Depolarization_Gain_Ratio_532"],
-            values["Perpendicular_Amplifier_Gain_532"],
-            values["Off_Nadir_Angle"],
+            as_masked_array(data["Perpendicular_RMS_Baseline_532"]),
+            as_masked_array(data["Laser_Energy_532"]),
+            as_masked_array(data["Calibration_Constant_532"]),
+            as_masked_array(data["Depolarization_Gain_Ratio_532"]),
+            as_masked_array(data["Perpendicular_Amplifier_Gain_532"]),
+            as_masked_array(data["Off_Nadir_Angle"]),
             "532_per",
         )
-
-    with timer("Surface detection at 1064"):
-        infrared = detect_surface(
-            values["Attenuated_Backscatter_1064"],
+    elif channel == "1064":
+        surface_indexes = detect_surface(
+            as_masked_array(data["Attenuated_Backscatter_1064"]),
             *common,
-            values["RMS_Baseline_1064"],
-            values["Laser_Energy_1064"],
-            values["Calibration_Constant_1064"],
+            as_masked_array(data["RMS_Baseline_1064"]),
+            as_masked_array(data["Laser_Energy_1064"]),
+            as_masked_array(data["Calibration_Constant_1064"]),
             1,
-            values["Amplifier_Gain_1064"],
-            values["Off_Nadir_Angle"],
+            as_masked_array(data["Amplifier_Gain_1064"]),
+            as_masked_array(data["Off_Nadir_Angle"]),
             "1064",
+        )
+    else:
+        raise ValueError(
+            f"Unknown lidar channel {channel!r}. Expected '532_par', "
+            "'532_per', or '1064'."
         )
 
     coords = {"profile": data.coords["profile"]}
+    return xr.DataArray(
+        surface_indexes,
+        dims=("profile",),
+        coords=coords,
+        name=channel,
+    )
+
+
+def detect_surface_in_3_channels(data):
+    """Return surface indexes for the three lidar channels."""
+
+    with timer("Surface detection at 532_par"):
+        parallel = detect_surface_in_channel(data, "532_par")
+
+    with timer("Surface detection at 532_per"):
+        perpendicular = detect_surface_in_channel(data, "532_per")
+
+    with timer("Surface detection at 1064"):
+        infrared = detect_surface_in_channel(data, "1064")
+
     return xr.Dataset(
         {
-            "532_par": xr.DataArray(parallel, dims=("profile",), coords=coords),
-            "532_per": xr.DataArray(perpendicular, dims=("profile",), coords=coords),
-            "1064": xr.DataArray(infrared, dims=("profile",), coords=coords),
+            "532_par": parallel,
+            "532_per": perpendicular,
+            "1064": infrared,
         }
     )

@@ -271,97 +271,119 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
            twoway_transmittance_array
 
 
-def detect_features_in_3_channels(data, surface_indexes):
-    """Run feature detection and return masks and development arrays."""
+FEATURE_INPUTS_BY_CHANNEL = {
+    "532_par": (
+        "Parallel_Detection_Flags_532",
+        "Parallel_Attenuated_Backscatter_532",
+        "Molecular_Parallel_Attenuated_Backscatter_532",
+        "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Parallel",
+        "Molecular_Parallel_Backscatter_532",
+        "Parallel_Detection_Flags_532_steps",
+        "Parallel_Attenuated_Scattering_Ratio_532_steps",
+        "Parallel_CumulativeTwoWayTransmittance_532",
+    ),
+    "532_per": (
+        "Perpendicular_Detection_Flags_532",
+        "Perpendicular_Attenuated_Backscatter_532",
+        "Molecular_Perpendicular_Attenuated_Backscatter_532",
+        "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Perpendicular",
+        "Molecular_Perpendicular_Backscatter_532",
+        "Perpendicular_Detection_Flags_532_steps",
+        "Perpendicular_Attenuated_Scattering_Ratio_532_steps",
+        "Perpendicular_CumulativeTwoWayTransmittance_532",
+    ),
+    "1064": (
+        "Detection_Flags_1064",
+        "Attenuated_Backscatter_1064",
+        "Molecular_Attenuated_Backscatter_1064",
+        "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_1064",
+        "Molecular_Backscatter_1064",
+        "Detection_Flags_1064_steps",
+        "Attenuated_Scattering_Ratio_1064_steps",
+        "CumulativeTwoWayTransmittance_1064",
+    ),
+}
 
-    masks = {}
-    development = {}
 
-    channel_inputs = (
-        (
-            "532_par",
-            "Parallel_Detection_Flags_532",
-            "Parallel_Attenuated_Backscatter_532",
-            "Molecular_Parallel_Attenuated_Backscatter_532",
-            "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Parallel",
-            "Molecular_Parallel_Backscatter_532",
-            "Parallel_Detection_Flags_532_steps",
-            "Parallel_Attenuated_Scattering_Ratio_532_steps",
-            "Parallel_CumulativeTwoWayTransmittance_532",
-        ),
-        (
-            "532_per",
-            "Perpendicular_Detection_Flags_532",
-            "Perpendicular_Attenuated_Backscatter_532",
-            "Molecular_Perpendicular_Attenuated_Backscatter_532",
-            "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Perpendicular",
-            "Molecular_Perpendicular_Backscatter_532",
-            "Perpendicular_Detection_Flags_532_steps",
-            "Perpendicular_Attenuated_Scattering_Ratio_532_steps",
-            "Perpendicular_CumulativeTwoWayTransmittance_532",
-        ),
-        (
-            "1064",
-            "Detection_Flags_1064",
-            "Attenuated_Backscatter_1064",
-            "Molecular_Attenuated_Backscatter_1064",
-            "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_1064",
-            "Molecular_Backscatter_1064",
-            "Detection_Flags_1064_steps",
-            "Attenuated_Scattering_Ratio_1064_steps",
-            "CumulativeTwoWayTransmittance_1064",
-        ),
-    )
+def detect_features_in_channel(data, surface_indexes, channel):
+    """Run feature detection for one lidar channel."""
 
-    for (
+    try:
+        (
+            mask_name,
+            attenuated_name,
+            molecular_attenuated_name,
+            uncertainty_name,
+            molecular_name,
+            steps_name,
+            ratio_steps_name,
+            transmittance_name,
+        ) = FEATURE_INPUTS_BY_CHANNEL[channel]
+    except KeyError:
+        raise ValueError(
+            f"Unknown lidar channel {channel!r}. Expected '532_par', "
+            "'532_per', or '1064'."
+        ) from None
+
+    template = data[attenuated_name]
+    mask, steps, ratio_steps, transmittance = detect_features(
+        as_masked_array(template / data[molecular_attenuated_name]),
+        as_masked_array(data[uncertainty_name]),
+        as_masked_array(data[molecular_name]),
+        as_masked_array(data["Temperature"]),
+        as_masked_array(surface_indexes),
         channel,
-        mask_name,
-        attenuated_name,
-        molecular_attenuated_name,
-        uncertainty_name,
-        molecular_name,
-        steps_name,
-        ratio_steps_name,
-        transmittance_name,
-    ) in channel_inputs:
-        with timer(f"Feature detection at {channel}"):
-            template = data[attenuated_name]
-            mask, steps, ratio_steps, transmittance = detect_features(
-                as_masked_array(template / data[molecular_attenuated_name]),
-                as_masked_array(data[uncertainty_name]),
-                as_masked_array(data[molecular_name]),
-                as_masked_array(data["Temperature"]),
-                as_masked_array(surface_indexes[channel]),
-                channel,
-            )
-            base_coords = {
-                "profile": template.coords["profile"],
-                "altitude": template.coords["altitude"],
-            }
-            masks[mask_name] = xr.DataArray(
-                np.ma.asarray(mask).filled(0).astype(np.uint8, copy=False),
-                dims=("profile", "altitude"),
-                coords=base_coords,
-            )
-            step_dimension = f"step_{channel}"
-            step_coords = {
-                step_dimension: np.arange(steps.shape[0]),
-                **base_coords,
-            }
-            development[steps_name] = xr.DataArray(
+    )
+    base_coords = {
+        "profile": template.coords["profile"],
+        "altitude": template.coords["altitude"],
+    }
+    detection_mask = xr.DataArray(
+        np.ma.asarray(mask).filled(0).astype(np.uint8, copy=False),
+        dims=("profile", "altitude"),
+        coords=base_coords,
+        name=mask_name,
+    )
+    step_dimension = f"step_{channel}"
+    step_coords = {
+        step_dimension: np.arange(steps.shape[0]),
+        **base_coords,
+    }
+    development = xr.Dataset(
+        {
+            steps_name: xr.DataArray(
                 np.ma.asarray(steps).filled(0).astype(np.uint8, copy=False),
                 dims=(step_dimension, "profile", "altitude"),
                 coords=step_coords,
-            )
-            development[ratio_steps_name] = xr.DataArray(
+            ),
+            ratio_steps_name: xr.DataArray(
                 ratio_steps,
                 dims=(step_dimension, "profile", "altitude"),
                 coords=step_coords,
-            )
-            development[transmittance_name] = xr.DataArray(
+            ),
+            transmittance_name: xr.DataArray(
                 transmittance,
                 dims=("profile", "altitude"),
                 coords=base_coords,
-            )
+            ),
+        }
+    )
+    return detection_mask, development
 
-    return xr.Dataset(masks), xr.Dataset(development)
+
+def detect_features_in_3_channels(data, surface_indexes):
+    """Run feature detection and return masks and development arrays."""
+
+    masks = []
+    development = []
+    for channel in ("532_par", "532_per", "1064"):
+        with timer(f"Feature detection at {channel}"):
+            mask, channel_development = detect_features_in_channel(
+                data,
+                surface_indexes[channel],
+                channel,
+            )
+        masks.append(mask)
+        development.append(channel_development)
+
+    return xr.merge(masks), xr.merge(development)
