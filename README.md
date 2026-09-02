@@ -208,7 +208,7 @@ The launcher creates complete run configurations under `runs/case_studies/`. Eac
 
 ### 4.4 Interactive visualization
 
-The interactive notebook under `visualization/` displays the four 2D-McDA masks together with the corresponding CALIOP Level 1 attenuated-backscatter signals, the CALIOP VFM, and a map of the complete granule and plotted section. All twelve panels share their profile and altitude ranges, so zooming or panning one panel updates the complete layout.
+The interactive notebook under `visualization/` displays the 2D-McDA masks together with the corresponding CALIOP Level 1 attenuated-backscatter signals, and the CALIOP VFM. All panels share their profile and altitude ranges, so zooming or panning one panel updates the complete layout.
 
 Create a local viewer configuration before opening the notebook:
 
@@ -219,10 +219,24 @@ cp visualization/config.example.yaml visualization/config.yaml
 Edit `visualization/config.yaml` as needed:
 
 ```yaml
-product_directory: data/output/2D_McDA.v2.3.0-dirty
-granule: "2018-08-31T21-33-53ZN_lon_67.00_60.00"
-l1_path: null
-common_config_path: config/common.yaml
+2d_mcda:
+  root_directory: data/output
+  version: "2.3.1"
+  product_type: "Dev"
+  path_format: "2D_McDA.v{version}/{year}/{year}_{month:02d}_{day:02d}"
+  granule: "2018-08-31T21-33-53ZN_lon_67.00_60.00"
+
+cal_lid_l1:
+  root_directory: "<CALIOP_ROOT>"
+  version: "5.00"
+  product_type: "Standard"
+  path_format: "CAL_LID_L1.v{version}/{year}/{year}_{month:02d}_{day:02d}"
+
+cal_lid_l2_vfm:
+  root_directory: "<CALIOP_ROOT>"
+  version: "5.00"
+  product_type: "Standard"
+  path_format: "VFM.v{version}/{year}/{year}_{month:02d}_{day:02d}"
 
 plot:
   width: 500
@@ -231,10 +245,9 @@ plot:
   altitude_range: [0, 30]
 ```
 
-- `product_directory`: directory containing one version of the 2D-McDA output product. The viewer searches this directory recursively but never selects a product according to its modification time.
-- `granule`: required suffix identifying the 2D-McDA NetCDF file. It may identify the complete granule, for example `2018-08-31T21-33-53ZN`, or include the processed longitude bounds, for example `2018-08-31T21-33-53ZN_lon_67.00_60.00`. The combination of `product_directory` and `granule` must match exactly one NetCDF file.
-- `l1_path`: corresponding CALIOP Level 1 HDF file. Leave it as `null` to locate the file automatically from its timestamp and the CALIOP archive described by `common_config_path`.
-- `common_config_path`: processing configuration containing `cal_lid_l1.root_directory`, `cal_lid_l1.version`, and `cal_lid_l1.path_format`.
+- `2d_mcda.root_directory`, `2d_mcda.version`, and `2d_mcda.path_format`: location and directory structure of the 2D-McDA archive. The viewer searches the matching daily directory recursively, falling back to the root directory when that daily directory is absent.
+- `2d_mcda.granule`: required suffix identifying the 2D-McDA NetCDF file. It may identify the complete granule, for example `2018-08-31T21-33-53ZN`, or a longitude section, for example `2018-08-31T21-33-53ZN_lon_67.00_60.00`. The configured value must match exactly one NetCDF file.
+- `cal_lid_l1` and `cal_lid_l2_vfm`: locations and directory structures of the CALIOP Level 1 and VFM archives. The viewer derives the complete CALIOP identifier, such as `2018-08-31T21-33-53ZN`, from `2d_mcda.granule` by removing an optional `_lon_<start>_<end>` suffix, then selects the corresponding L1 and VFM HDF files automatically.
 - `plot.width` and `plot.height`: dimensions in pixels of each interactive panel.
 - `plot.longitude_range`: required pair of longitude bounds. The nearest profiles define the initial horizontal limits of all twelve panels and the highlighted section on the map.
 - `plot.altitude_range`: initial altitude limits in kilometres, or `null` to display the complete vertical range.

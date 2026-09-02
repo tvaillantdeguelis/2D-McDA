@@ -1,7 +1,21 @@
-product_directory: data/output/2D_McDA.v2.3.1
-granule: "2018-08-31T21-33-53ZN_lon_62.70_61.30"
-l1_path: null
-common_config_path: config/common.yaml
+2d_mcda:
+  root_directory: data/output
+  version: "2.3.1"
+  product_type: "Dev"
+  path_format: "2D_McDA.v{version}/{year}/{year}_{month:02d}_{day:02d}"
+  granule: "2018-08-31T21-33-53ZN_lon_62.70_61.30"
+
+cal_lid_l1:
+  root_directory: "/home/ticjo/Documents/Pro/Recherche/codes/DATA/CALIOP"
+  version: "5.00"
+  product_type: "Standard"
+  path_format: "CAL_LID_L1.v{version}/{year}/{year}_{month:02d}_{day:02d}"
+
+cal_lid_l2_vfm:
+  root_directory: "/home/ticjo/Documents/Pro/Recherche/codes/DATA/CALIOP"
+  version: "5.00"
+  product_type: "Standard"
+  path_format: "VFM.v{version}/{year}/{year}_{month:02d}_{day:02d}"
 
 plot:
   width: 500
