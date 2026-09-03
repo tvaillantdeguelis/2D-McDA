@@ -50,4 +50,4 @@ def profiles_are_consecutive(first_time, second_time):
     """Return whether two boundary profiles are less than one second apart."""
 
     difference = abs(second_time - first_time)
-    return bool(difference.item() < 1)
+    return bool(difference < 1)
