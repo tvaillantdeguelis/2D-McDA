@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 import xarray as xr
 
 
@@ -52,3 +53,26 @@ class ProcessingResult:
     altitude: xr.DataArray
     longitude_min: float
     longitude_max: float
+
+
+@dataclass
+class GranulePreparation:
+    """Everything computed once for a granule, before running the algorithm.
+
+    Built by ``workflow.preparation.prepare_granule``: the planned slices,
+    the neighboring-granule context profiles, and the empty whole-granule
+    output datasets that the algorithm will fill slice by slice.
+    """
+
+    profile_starts: np.ndarray
+    profile_ends: np.ndarray
+    context_starts: np.ndarray
+    context_ends: np.ndarray
+    slice_count: int
+    profile_count: int
+    last_profile_in_file: int
+    previous_profiles: xr.Dataset | None
+    next_profiles: xr.Dataset | None
+    altitude: xr.DataArray
+    granule_detection_product: xr.Dataset
+    granule_development_data: xr.Dataset

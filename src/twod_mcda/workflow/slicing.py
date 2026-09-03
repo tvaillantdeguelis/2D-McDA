@@ -52,6 +52,27 @@ def plan_slices(
     return profile_starts, profile_ends, context_starts, context_ends
 
 
+def trim_slice_context(slice_data):
+    """Remove the neighboring-granule context added on either side of a slice."""
+
+    context_by_side = (
+        ("start", slice_data.previous_context_count),
+        ("end", slice_data.next_context_count),
+    )
+
+    for side, profile_count in context_by_side:
+        if profile_count == 0:
+            continue
+        print(f"\n\n*****Remove context from {side} adjacent file...*****")
+        slice_data.input = trim_profiles(slice_data.input, profile_count, side)
+        slice_data.masks = trim_profiles(slice_data.masks, profile_count, side)
+        slice_data.development = trim_profiles(
+            slice_data.development,
+            profile_count,
+            side,
+        )
+
+
 def trim_profiles(array, profile_count, side):
     """
     Remove profiles added from an adjacent granule.

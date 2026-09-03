@@ -201,19 +201,6 @@ def split_granule_date(granule_date):
     return granule_date_dict
 
 
-def duplicate_5km_to_333m(data_5km):
-    return np.ma.repeat(data_5km, 15, axis=0)
-
-
-def duplicate_1km_to_333m(data_1km):
-    return np.ma.repeat(data_1km, 3, axis=0)
-
-def add_zeros_where_missing_profiles(data, nb_missing_prof):
-    if data.ndim == 1:
-        return np.ma.concatenate((data, np.ma.zeros(nb_missing_prof)))
-    else:
-        return np.ma.vstack((data, np.ma.zeros((nb_missing_prof, data.shape[1]))))
-
 def from_30mx333m_to_new_resolution(data, vgrid, hgrid, prof_min, print_first_ID=False):
     """
     Average CALIOP data to a new resolution.

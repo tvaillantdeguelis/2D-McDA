@@ -73,10 +73,6 @@ N_PROFILES_VFM_R4 = 3
 N_PROFILES_VFM_R3 = 5
 N_PROFILES_VFM_R2 = 15
 
-N_LAYERS_05KM_LAYER_PRODUCT = 15
-N_LAYERS_01KM_LAYER_PRODUCT = 10
-N_LAYERS_333M_LAYER_PRODUCT = 5
-
 LIDAR_ALTITUDES_FILE = (
     Path(__file__).resolve().parent
     / "resources"
@@ -95,15 +91,6 @@ CAL_LID_FILENAME_FMT = "CAL_LID_%s-%s-%s.%s.hdf" # product (ex: 'L2_VFM'), type 
 CAL_IIR_FILENAME_FMT = "CAL_IIR_%s-%s-%s.%s.hdf" # product (ex: 'L2_Track'), type (ex: Standard),
                                                  # version (ex: 'V4-10'),
                                                  # granule date (ex: '2010-06-01T01-33-28ZN')
-
-PRODUCT_H_RESOLUTION = {'333m': ['L1',
-                                 'L2_333mMLay'],
-                        '1km': ['L2_01kmCLay',],
-                        '5km': ['L2_05kmALay',
-                                'L2_05kmCLay',
-                                'L2_05kmMLay',
-                                'L2_05kmAPro',
-                                'L2_05kmCPro']}
 
 def get_caliop_correction_function(wl):
     """Input: wl = wavelength of the lidar channel
