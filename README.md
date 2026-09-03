@@ -126,7 +126,7 @@ The fields have the following meanings:
 The CALIOP Level 1 product type is fixed to `Standard` and is not configurable.
 
 - `processing.save_development_data`: include intermediate algorithm arrays in the output netCDF file. This increases its size.
-- `processing.max_altitude_km`: maximum processed altitude. The supported values are 30 and 40 km.
+- `processing.max_altitude_km`: maximum processed altitude, in km. Any altitude within the lidar altitude range is accepted; if set to `null`, it defaults to the top of region 4 (see `REGION_4_ALTITUDE_BOUNDARIES` in `constants.py`), i.e. 30.1 km.
 - `output.root_directory`: root directory in which result directories are created.
 - `output.product_type`: label included in the output filename; it defaults to `Dev`.
 - `output.path_format`: path below the output root directory. The placeholders `version`, `year`, `month`, and `day` are filled for each granule.

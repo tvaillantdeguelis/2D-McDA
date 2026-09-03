@@ -1,10 +1,20 @@
 """Resolve pipeline configuration into a processing request."""
 
-from datetime import datetime
 from pathlib import Path
 import re
 
-from twod_mcda.caliop.discovery import find_granule_file, find_neighbor_granules
+import numpy as np
+
+from twod_mcda.caliop.constants import (
+    LIDAR_DATA_ALTITUDES,
+    REGION_4_ALTITUDE_BOUNDARIES,
+)
+from twod_mcda.caliop.discovery import (
+    find_granule_file,
+    find_neighbor_granules,
+    parse_granule_time,
+)
+from twod_mcda.caliop.grids import alt_to_regular_30m_vertical_grid
 from twod_mcda.version import get_full_version
 from twod_mcda.workflow.models import ProcessingRequest
 
@@ -36,17 +46,38 @@ def _normalized_version(version):
     return f"V{version}"
 
 
+def _resolve_max_altitude_km(max_altitude_km):
+    """Resolve the configured maximum altitude, defaulting to the top of region 4."""
+
+    if max_altitude_km is None:
+        return REGION_4_ALTITUDE_BOUNDARIES[0]
+    return max_altitude_km
+
+
 def _altitude_index(max_altitude_km):
-    """Map a supported maximum altitude to the regular-grid index."""
+    """Map a maximum altitude in km to its regular 30 m grid index.
 
-    if max_altitude_km == 30:
-        return 600
-    if max_altitude_km == 40:
-        return None
+    The lidar altitude grid (``lidar_data_altitudes.pkl``) is expanded to
+    the regular 30 m vertical grid used by the reader, ordered bottom to
+    top. The returned index is the number of grid bins at or below
+    ``max_altitude_km``, suitable for slicing that grid as ``data[:index]``.
+    An altitude at or above the top of the grid keeps the whole profile,
+    reported as ``None``.
+    """
 
-    raise ValueError(
-        "processing.max_altitude_km must be either 30 or 40."
+    regular_grid_altitudes = alt_to_regular_30m_vertical_grid(LIDAR_DATA_ALTITUDES)
+
+    index = int(
+        np.searchsorted(regular_grid_altitudes, max_altitude_km, side="right")
     )
+
+    if index <= 0:
+        raise ValueError(
+            "processing.max_altitude_km must be above "
+            f"{regular_grid_altitudes[0]:.3f} km, got {max_altitude_km}."
+        )
+
+    return index if index < regular_grid_altitudes.size else None
 
 
 def _output_directory(output_cfg, granule_date, version):
@@ -65,12 +96,8 @@ def _output_directory(output_cfg, granule_date, version):
 def resolve_processing_request(cfg):
     """Resolve input paths and build a processing request from configuration."""
 
-    granule_time = datetime.strptime(
-        cfg["granule"][:-2], # Remove the trailing 'ZD' or 'ZN' from the granule identifier
-        "%Y-%m-%dT%H-%M-%S",
-    )
-    current_file = find_granule_file(cfg, granule_time)
-    previous_file, next_file = find_neighbor_granules(cfg, current_file)
+    current_file = find_granule_file(cfg)
+    previous_file, next_file = find_neighbor_granules(cfg)
 
     processing_cfg = cfg.get("processing", {})
     output_cfg = cfg["output"]
@@ -81,10 +108,10 @@ def resolve_processing_request(cfg):
     )
     caliop_cfg = cfg["cal_lid_l1"]
     version = _normalized_version(get_full_version())
-    granule_date = _granule_id(current_file)
-    granule_time = datetime.strptime(
-        granule_date[:-2], # Remove the trailing 'ZD' or 'ZN' from the granule identifier
-        "%Y-%m-%dT%H-%M-%S",
+    granule_date = cfg["granule"]
+    granule_time = parse_granule_time(granule_date)
+    maximum_altitude_km = _resolve_max_altitude_km(
+        processing_cfg["max_altitude_km"]
     )
 
     return ProcessingRequest(
@@ -112,8 +139,6 @@ def resolve_processing_request(cfg):
         output_version=version,
         output_product_type=output_cfg.get("product_type", "Dev"),
         output_directory=_output_directory(output_cfg, granule_time, version),
-        maximum_altitude_km=processing_cfg["max_altitude_km"],
-        maximum_altitude_index=_altitude_index(
-            processing_cfg["max_altitude_km"]
-        ),
+        maximum_altitude_km=maximum_altitude_km,
+        maximum_altitude_index=_altitude_index(maximum_altitude_km),
     )

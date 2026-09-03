@@ -29,7 +29,7 @@ class ProcessingRequest:
     output_version: str
     output_product_type: str
     output_directory: Path
-    maximum_altitude_km: int
+    maximum_altitude_km: int | float
     maximum_altitude_index: int | None
 
 

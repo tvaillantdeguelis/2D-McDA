@@ -2,12 +2,7 @@
 
 ``run_granule_pipeline`` is the entry point. It locates and opens one CALIOP
 granule, prepares it for processing (see ``workflow.preparation``), then
-applies the 2D-McDA scientific algorithm slice by slice:
-
-    1. Detect the surface in each of the three lidar channels.
-    2. Detect atmospheric features in each channel.
-    3. Remove the profiles borrowed from the neighboring granules.
-    4. Merge the three channels into one composite detection mask.
+applies the 2D-McDA scientific algorithm slice by slice.
 
 The result is written to a netCDF product at the end.
 """
