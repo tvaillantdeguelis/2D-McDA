@@ -126,7 +126,7 @@ The fields have the following meanings:
 The CALIOP Level 1 product type is fixed to `Standard` and is not configurable.
 
 - `processing.save_development_data`: include intermediate algorithm arrays in the output netCDF file. This increases its size.
-- `processing.max_altitude_km`: maximum processed altitude. The supported values are 30 and 40 km.
+- `processing.max_altitude_km`: maximum processed altitude, in km. Any altitude within the lidar altitude range is accepted; if set to `null`, it defaults to the top of region 4 (see `REGION_4_ALTITUDE_BOUNDARIES` in `constants.py`), i.e. 30.1 km.
 - `output.root_directory`: root directory in which result directories are created.
 - `output.product_type`: label included in the output filename; it defaults to `Dev`.
 - `output.path_format`: path below the output root directory. The placeholders `version`, `year`, `month`, and `day` are filled for each granule.
@@ -241,7 +241,7 @@ cal_lid_l2_vfm:
 plot:
   width: 500
   height: 280
-  longitude_range: [67.00, 60.00]
+  longitude_range: null # Or [67.00, 60.00] to select a longitude section.
   altitude_range: [0, 30]
 ```
 
@@ -249,7 +249,7 @@ plot:
 - `2d_mcda.granule`: required suffix identifying the 2D-McDA NetCDF file. It may identify the complete granule, for example `2018-08-31T21-33-53ZN`, or a longitude section, for example `2018-08-31T21-33-53ZN_lon_67.00_60.00`. The configured value must match exactly one NetCDF file.
 - `cal_lid_l1` and `cal_lid_l2_vfm`: locations and directory structures of the CALIOP Level 1 and VFM archives. The viewer derives the complete CALIOP identifier, such as `2018-08-31T21-33-53ZN`, from `2d_mcda.granule` by removing an optional `_lon_<start>_<end>` suffix, then selects the corresponding L1 and VFM HDF files automatically.
 - `plot.width` and `plot.height`: dimensions in pixels of each interactive panel.
-- `plot.longitude_range`: required pair of longitude bounds. The nearest profiles define the initial horizontal limits of all twelve panels and the highlighted section on the map.
+- `plot.longitude_range`: optional pair of longitude bounds. The nearest profiles define the initial horizontal limits of all twelve panels and the highlighted section on the map. Set it to `null` to display every profile present in the selected 2D-McDA product.
 - `plot.altitude_range`: initial altitude limits in kilometres, or `null` to display the complete vertical range.
 
 Relative paths are resolved from the repository root. `visualization/config.yaml` is ignored by Git, while `visualization/config.example.yaml` is tracked and provides the portable defaults.

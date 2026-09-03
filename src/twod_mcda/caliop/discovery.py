@@ -4,11 +4,38 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import re
 
+from twod_mcda.caliop.constants import (
+    CAL_LID_FILENAME_FMT,
+    CALIOP_L1_PRODUCT_TYPE,
+    CALIPSO_STRFTIME_FMT,
+)
+
 
 GRANULE_PATTERN = re.compile(
-    r"CAL_LID_L1-[^-]+-V(\d+)-(\d+)\."
+    r"CAL_LID_L1-[^-]+-V(?:\d+)-(?:\d+)\."
     r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})Z[DN]\.hdf"
 )
+
+
+def parse_granule_time(granule):
+    """
+    Parse a granule identifier into its observation datetime.
+
+    Parameters
+    ----------
+    granule : str
+        Granule identifier, e.g. "2013-01-11T03-25-54ZD".
+
+    Returns
+    -------
+    datetime
+        Observation start time.
+    """
+
+    return datetime.strptime(
+        granule[:-2],  # Remove the trailing 'ZD' or 'ZN'
+        CALIPSO_STRFTIME_FMT,
+    )
 
 
 def extract_granule_time(filename):
@@ -32,8 +59,8 @@ def extract_granule_time(filename):
         )
 
     return datetime.strptime(
-        match.group(3),
-        "%Y-%m-%dT%H-%M-%S",
+        match.group(1),
+        CALIPSO_STRFTIME_FMT,
     )
 
 
@@ -69,17 +96,15 @@ def get_caliop_folder(cfg, date):
     return root_directory / relative_path
 
 
-def find_granule_file(cfg, granule_time):
+def find_granule_file(cfg):
     """
-    Find the CALIOP file corresponding to a granule timestamp.
+    Build the CALIOP file path corresponding to the configured granule.
 
     Parameters
     ----------
     cfg : dict
-        Processing configuration.
-
-    granule_time : datetime
-        Granule observation start time.
+        Processing configuration, including the "granule" identifier,
+        e.g. "2013-01-11T03-25-54ZD".
 
     Returns
     -------
@@ -87,21 +112,25 @@ def find_granule_file(cfg, granule_time):
         CALIOP granule file.
     """
 
-    folder = get_caliop_folder(cfg, granule_time)
+    granule = cfg["granule"]
+    folder = get_caliop_folder(cfg, parse_granule_time(granule))
 
-    if not folder.exists():
+    cal_cfg = cfg["cal_lid_l1"]
+    version = f"V{cal_cfg['version']}".replace(".", "-")
+    filename = CAL_LID_FILENAME_FMT % (
+        "L1",
+        CALIOP_L1_PRODUCT_TYPE,
+        version,
+        granule,
+    )
+    file = folder / filename
+
+    if not file.exists():
         raise FileNotFoundError(
-            f"CALIOP directory not found: {folder}"
+            f"CALIOP granule not found: {file}"
         )
 
-    for file in folder.glob("CAL_LID_L1-*.hdf"):
-
-        if extract_granule_time(file) == granule_time:
-            return file
-
-    raise FileNotFoundError(
-        f"CALIOP granule not found for time: {granule_time}"
-    )
+    return file
 
 
 def find_granules_between_dates(cfg, start_date, end_date):
@@ -167,7 +196,7 @@ def find_granules_between_dates(cfg, start_date, end_date):
     ]
 
 
-def find_neighbor_granules(cfg, current_file):
+def find_neighbor_granules(cfg):
     """
     Find previous and next CALIOP granules.
 
@@ -177,10 +206,8 @@ def find_neighbor_granules(cfg, current_file):
     Parameters
     ----------
     cfg : dict
-        Processing configuration.
-
-    current_file : Path
-        Current CALIOP granule file.
+        Processing configuration, including the "granule" identifier,
+        e.g. "2013-01-11T03-25-54ZD".
 
     Returns
     -------
@@ -191,7 +218,7 @@ def find_neighbor_granules(cfg, current_file):
         Next granule file.
     """
 
-    current_time = extract_granule_time(current_file)
+    current_time = parse_granule_time(cfg["granule"])
 
 
     # Search one day before, current day, and one day after.
@@ -226,18 +253,14 @@ def find_neighbor_granules(cfg, current_file):
     previous_file = None
     next_file = None
 
+    for file in files:
 
-    for index, file in enumerate(files):
+        file_time = extract_granule_time(file)
 
-        if file == current_file:
-
-            if index > 0:
-                previous_file = files[index - 1]
-
-            if index < len(files) - 1:
-                next_file = files[index + 1]
-
+        if file_time < current_time:
+            previous_file = file
+        elif file_time > current_time:
+            next_file = file
             break
-
 
     return previous_file, next_file

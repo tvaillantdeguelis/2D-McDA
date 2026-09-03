@@ -5,7 +5,7 @@ cal_lid_l1:
 
 processing:
   save_development_data: false
-  max_altitude_km: 30
+  max_altitude_km: null
 
 output:
   root_directory: "/home/ticjo/Documents/Pro/Recherche/codes/projects/2D-McDA/data/output"
