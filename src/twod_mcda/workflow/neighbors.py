@@ -5,7 +5,9 @@ import xarray as xr
 from twod_mcda.caliop.input import open_granule, read_slice
 
 
-def read_adjacent_profiles(request, granule_date, directory, profile_start, profile_end):
+def read_adjacent_profiles(
+    request, granule_date, directory, profile_start, profile_end
+):
     """Load context profiles from one adjacent granule, then close its file."""
 
     with open_granule(
@@ -31,11 +33,7 @@ def append_adjacent_profiles(current, adjacent, side):
     if side not in {"start", "end"}:
         raise ValueError(f"Invalid side: {side!r}")
 
-    arrays = (
-        (adjacent, current)
-        if side == "start"
-        else (current, adjacent)
-    )
+    arrays = (adjacent, current) if side == "start" else (current, adjacent)
     return xr.concat(
         arrays,
         dim="profile",

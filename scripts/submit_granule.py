@@ -6,7 +6,6 @@ from pathlib import Path
 
 from config_loader import load_config
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SBATCH_SCRIPT = PROJECT_ROOT / "scripts" / "process_granule.sbatch"
 LOG_ROOT = PROJECT_ROOT / "logs" / "slurm"
@@ -27,10 +26,7 @@ def build_job_name(cfg):
     }
     mode = mode_labels[subset["mode"]]
 
-    return (
-        f"2D-McDA_{granule}_{mode}_"
-        f"{subset['start']}_{subset['end']}"
-    )
+    return f"2D-McDA_{granule}_{mode}_" f"{subset['start']}_{subset['end']}"
 
 
 def submit_granule(config_file):

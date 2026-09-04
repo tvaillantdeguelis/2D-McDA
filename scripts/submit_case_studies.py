@@ -10,7 +10,6 @@ import yaml
 from config_loader import load_config
 from submit_granule import submit_granule
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNS_ROOT = PROJECT_ROOT / "runs" / "case_studies"
 
@@ -52,9 +51,7 @@ def submit_case_studies(config_file):
         raise ValueError("The configuration must define a case_studies list.")
 
     enabled_case_studies = [
-        case_study
-        for case_study in case_studies
-        if case_study.get("enabled", False)
+        case_study for case_study in case_studies if case_study.get("enabled", False)
     ]
     print(f"Found {len(enabled_case_studies)} enabled case studies.")
 
@@ -67,9 +64,7 @@ def submit_case_studies(config_file):
         granule = case_study["granule"]
         granule_occurrences[granule] += 1
         occurrence = (
-            granule_occurrences[granule]
-            if granule_counts[granule] > 1
-            else None
+            granule_occurrences[granule] if granule_counts[granule] > 1 else None
         )
         granule_config_file = create_case_study_config(
             cfg,

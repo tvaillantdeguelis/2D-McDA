@@ -55,9 +55,7 @@ def _attributes(variable, dtype):
     """Return attributes with numeric ranges encoded in the variable dtype."""
 
     attributes = {
-        key: value
-        for key, value in variable.attributes.items()
-        if value is not None
+        key: value for key, value in variable.attributes.items() if value is not None
     }
     for name in ("valid_range", "flag_values", "flag_masks"):
         if name in attributes:
@@ -87,9 +85,7 @@ def write_netcdf(filename, variables, global_attributes=None):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     variables = tuple(variables)
     dimensions = _dimensions(variables)
-    temporary_path = output_path.with_name(
-        f".{output_path.name}.{uuid4().hex}.tmp"
-    )
+    temporary_path = output_path.with_name(f".{output_path.name}.{uuid4().hex}.tmp")
 
     try:
         with Dataset(temporary_path, mode="w", format="NETCDF4") as dataset:

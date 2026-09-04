@@ -10,7 +10,6 @@ from twod_mcda.caliop.constants import (
     CALIPSO_STRFTIME_FMT,
 )
 
-
 GRANULE_PATTERN = re.compile(
     r"CAL_LID_L1-[^-]+-V(?:\d+)-(?:\d+)\."
     r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})Z[DN]\.hdf"
@@ -54,9 +53,7 @@ def extract_granule_time(filename):
     match = GRANULE_PATTERN.match(filename.name)
 
     if match is None:
-        raise ValueError(
-            f"Invalid CALIOP filename format: {filename.name}"
-        )
+        raise ValueError(f"Invalid CALIOP filename format: {filename.name}")
 
     return datetime.strptime(
         match.group(1),
@@ -126,9 +123,7 @@ def find_granule_file(cfg):
     file = folder / filename
 
     if not file.exists():
-        raise FileNotFoundError(
-            f"CALIOP granule not found: {file}"
-        )
+        raise FileNotFoundError(f"CALIOP granule not found: {file}")
 
     return file
 
@@ -168,12 +163,9 @@ def find_granules_between_dates(cfg, start_date, end_date):
 
         if folder.exists():
 
-            files.extend(
-                folder.glob("CAL_LID_L1-*.hdf")
-            )
+            files.extend(folder.glob("CAL_LID_L1-*.hdf"))
 
         current_date += timedelta(days=1)
-
 
     # Sort files according to their observation time
     files = sorted(
@@ -181,14 +173,10 @@ def find_granules_between_dates(cfg, start_date, end_date):
         key=extract_granule_time,
     )
 
-
     # Keep only granules inside the requested period
     granule_files = [
-        file
-        for file in files
-        if start_date <= extract_granule_time(file) <= end_date
+        file for file in files if start_date <= extract_granule_time(file) <= end_date
     ]
-
 
     return [
         extract_granule_time(file).strftime("%Y-%m-%dT%H-%M-%SZN")
@@ -220,7 +208,6 @@ def find_neighbor_granules(cfg):
 
     current_time = parse_granule_time(cfg["granule"])
 
-
     # Search one day before, current day, and one day after.
     # This handles granules crossing midnight.
     search_dates = [
@@ -228,7 +215,6 @@ def find_neighbor_granules(cfg):
         current_time,
         current_time + timedelta(days=1),
     ]
-
 
     files = []
 
@@ -238,17 +224,13 @@ def find_neighbor_granules(cfg):
 
         if folder.exists():
 
-            files.extend(
-                folder.glob("CAL_LID_L1-*.hdf")
-            )
-
+            files.extend(folder.glob("CAL_LID_L1-*.hdf"))
 
     # Sort granules chronologically
     files = sorted(
-        set(files),
+        files,
         key=extract_granule_time,
     )
-
 
     previous_file = None
     next_file = None

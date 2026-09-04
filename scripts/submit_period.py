@@ -14,7 +14,6 @@ from config_loader import load_config
 from submit_granule import submit_granule
 from twod_mcda.caliop.discovery import find_granules_between_dates
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUNS_ROOT = PROJECT_ROOT / "runs"
 
@@ -105,9 +104,7 @@ def submit_period(config_file):
     config_file = Path(config_file).resolve()
 
     if not config_file.is_file():
-        raise FileNotFoundError(
-            f"Configuration file not found: {config_file}"
-        )
+        raise FileNotFoundError(f"Configuration file not found: {config_file}")
 
     cfg = load_config(config_file)
 
@@ -150,9 +147,7 @@ def main():
     """Parse command-line arguments and submit a processing period."""
 
     parser = argparse.ArgumentParser(
-        description=(
-            "Submit CALIOP granule processing jobs for a given period."
-        )
+        description=("Submit CALIOP granule processing jobs for a given period.")
     )
 
     parser.add_argument(

@@ -21,9 +21,7 @@ def main():
     # Create a command-line parser for this script.
     # It handles arguments passed when running the script like:
     # python process_granule.py /path/to/config.yaml
-    parser = argparse.ArgumentParser(
-        description="Process one CALIOP granule."
-    )
+    parser = argparse.ArgumentParser(description="Process one CALIOP granule.")
 
     # Declare a required positional argument named config_file.
     parser.add_argument(

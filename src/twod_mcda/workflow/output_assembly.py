@@ -6,7 +6,6 @@ import xarray as xr
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
 from twod_mcda.workflow.models import ProcessingResult
 
-
 PROFILE_METADATA = (
     "Profile_ID",
     "Profile_Time",
@@ -92,14 +91,14 @@ def store_slice(
     selected_profiles = slice(copy_min, copy_max)
 
     for name in PROFILE_METADATA:
-        output[name].loc[{"profile": selected_profiles}] = slice_data.input[
-            name
-        ].sel(profile=selected_profiles)
+        output[name].loc[{"profile": selected_profiles}] = slice_data.input[name].sel(
+            profile=selected_profiles
+        )
 
     for name in DETECTION_MASKS:
-        output[name].loc[{"profile": selected_profiles}] = slice_data.masks[
-            name
-        ].sel(profile=selected_profiles)
+        output[name].loc[{"profile": selected_profiles}] = slice_data.masks[name].sel(
+            profile=selected_profiles
+        )
 
 
 def store_development(
@@ -128,8 +127,7 @@ def store_development(
     for name, values in slice_development.items():
         if "profile" not in values.dims:
             raise ValueError(
-                f"Unsupported development array shape for {name!r}: "
-                f"{values.shape}."
+                f"Unsupported development array shape for {name!r}: " f"{values.shape}."
             )
 
         selected = values.sel(profile=slice(copy_min, copy_max))

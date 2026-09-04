@@ -93,9 +93,7 @@ def trim_profiles(array, profile_count, side):
     """
 
     if side not in {"start", "end"}:
-        raise ValueError(
-            f"Invalid side {side!r}. Expected 'start' or 'end'."
-        )
+        raise ValueError(f"Invalid side {side!r}. Expected 'start' or 'end'.")
 
     if isinstance(array, (xr.DataArray, xr.Dataset)):
         if "profile" not in array.dims:
@@ -114,9 +112,7 @@ def trim_profiles(array, profile_count, side):
     elif array.ndim == 3:
         profile_axis = 1
     else:
-        raise ValueError(
-            f"Unsupported array dimension: {array.ndim}"
-        )
+        raise ValueError(f"Unsupported array dimension: {array.ndim}")
 
     slices = [slice(None)] * array.ndim
 

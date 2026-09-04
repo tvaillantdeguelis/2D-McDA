@@ -26,6 +26,7 @@ from twod_mcda.caliop.grids import (
 MESSAGE_EXECPTION_SLICE_START_END_TYPE = '''f"Error: slice_start_end_type = '{slice_start_end_type}'" \
                                           "is not defined. Please use 'profindex' or 'longitude'\n"'''
 
+
 class CALIPSOReader:
     """Lazy reader that keeps one HDF4 file open and caches one profile slice."""
 
@@ -160,9 +161,7 @@ class CALIPSOReader:
                 if not isinstance(data, xr.DataArray):
                     data = xr.DataArray(
                         data,
-                        dims=tuple(
-                            f"hdf_dim_{axis}" for axis in range(data.ndim)
-                        ),
+                        dims=tuple(f"hdf_dim_{axis}" for axis in range(data.ndim)),
                         name=key,
                     )
                 self._static_cache[key] = self._squeeze_non_profile_axes(
@@ -203,9 +202,7 @@ class CALIPSOReader:
             )
         data = self._squeeze_non_profile_axes(data, shape, profile_axis)
         squeezed_before_profile = sum(
-            size == 1
-            for axis, size in enumerate(shape)
-            if axis < profile_axis
+            size == 1 for axis, size in enumerate(shape) if axis < profile_axis
         )
         effective_profile_axis = profile_axis - squeezed_before_profile
         data = self._dimension_names(
@@ -217,8 +214,14 @@ class CALIPSOReader:
         self._slice_cache[key] = data
         return data
 
-    def get_data(self, key, slice_start=None, slice_end=None, slice_start_end_type='profindex',
-                 do_fillvalue=True):
+    def get_data(
+        self,
+        key,
+        slice_start=None,
+        slice_end=None,
+        slice_start_end_type="profindex",
+        do_fillvalue=True,
+    ):
         """
         Get data for the key parameter from slice_start to slice_end.
 
@@ -267,9 +270,19 @@ class CALIPSOReader:
 
 
 class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
-    def __init__(self, product, version, data_type, granule_date, grid='333mx30m',
-                 slice_start=None, slice_end=None, slice_start_end_type='profindex',
-                 index30m_alt_max=None, folderpath=None):
+    def __init__(
+        self,
+        product,
+        version,
+        data_type,
+        granule_date,
+        grid="333mx30m",
+        slice_start=None,
+        slice_end=None,
+        slice_start_end_type="profindex",
+        index30m_alt_max=None,
+        folderpath=None,
+    ):
         """
         Get original and derived CALIOP parameters on a regular grid.
 
@@ -292,29 +305,40 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         self.product = product
         self.version = version
         self.data_type = data_type
-        self.hgrid = grid.split('x')[0]
-        self.vgrid = grid.split('x')[1]
+        self.hgrid = grid.split("x")[0]
+        self.vgrid = grid.split("x")[1]
         self.granule_date = granule_date
         self.index30m_alt_max = index30m_alt_max
-        self.filename = CAL_LID_FILENAME_FMT % (product, data_type, version.replace(".", "-"),
-                                                granule_date)
+        self.filename = CAL_LID_FILENAME_FMT % (
+            product,
+            data_type,
+            version.replace(".", "-"),
+            granule_date,
+        )
         if folderpath:
             self.folderpath = folderpath
-        else: # automatic path detection
-            self.folderpath = automatic_path_detection(product, version, data_type, granule_date)
+        else:  # automatic path detection
+            self.folderpath = automatic_path_detection(
+                product, version, data_type, granule_date
+            )
         self.filepath = os.path.join(self.folderpath, self.filename)
-        self._molecular_profiles = {"532": None, "532par": None, "532per": None, "1064": None}
+        self._molecular_profiles = {
+            "532": None,
+            "532par": None,
+            "532per": None,
+            "1064": None,
+        }
 
         self.data_reader = CALIPSOReader(self.filepath)
 
         # Get lat and lon on the whole granule (2D-McDA always reads the L1 product at its
         # native 333 m resolution, so the granule-wide and native-resolution lat/lon are the same)
-        self.lon_granule = self.data_reader.get_data('Longitude').copy()
-        self.lat_granule = self.data_reader.get_data('Latitude').copy()
+        self.lon_granule = self.data_reader.get_data("Longitude").copy()
+        self.lat_granule = self.data_reader.get_data("Latitude").copy()
         self._lon_granule_l1 = self.lon_granule.copy()
         self._lat_granule_l1 = self.lat_granule.copy()
 
-        if slice_start_end_type=='profindex':
+        if slice_start_end_type == "profindex":
             if slice_start is not None:
                 if slice_start >= 0:
                     self.prof_min = int(slice_start)
@@ -326,9 +350,10 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
                 self.prof_max = int(slice_end)
             else:
                 self.prof_max = self._lat_granule_l1.size - 1
-        elif slice_start_end_type=='longitude':
-            self.prof_min, self.prof_max = get_prof_min_max_indexes_from_lon(self._lon_granule_l1, slice_start,
-                                                                             slice_end)
+        elif slice_start_end_type == "longitude":
+            self.prof_min, self.prof_max = get_prof_min_max_indexes_from_lon(
+                self._lon_granule_l1, slice_start, slice_end
+            )
         else:
             raise Exception(MESSAGE_EXECPTION_SLICE_START_END_TYPE)
         self.lon_min = self._lon_granule_l1.isel(profile=self.prof_min).item()
@@ -354,10 +379,18 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         selected = copy(self)
         selected.prof_min = int(profile_start)
         selected.prof_max = int(profile_end)
-        selected.lon_min = selected._lon_granule_l1.isel(profile=selected.prof_min).item()
-        selected.lat_min = selected._lat_granule_l1.isel(profile=selected.prof_min).item()
-        selected.lon_max = selected._lon_granule_l1.isel(profile=selected.prof_max).item()
-        selected.lat_max = selected._lat_granule_l1.isel(profile=selected.prof_max).item()
+        selected.lon_min = selected._lon_granule_l1.isel(
+            profile=selected.prof_min
+        ).item()
+        selected.lat_min = selected._lat_granule_l1.isel(
+            profile=selected.prof_min
+        ).item()
+        selected.lon_max = selected._lon_granule_l1.isel(
+            profile=selected.prof_max
+        ).item()
+        selected.lat_max = selected._lat_granule_l1.isel(
+            profile=selected.prof_max
+        ).item()
         selected.nb_profiles = selected.prof_max - selected.prof_min + 1
         selected._molecular_profiles = {
             "532": None,
@@ -368,12 +401,14 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         return selected
 
     def print_lat_lon_min_max(self):
-        print(f"\tFrom min profile index {self.prof_min:d} "
-              f"(lat = {self.lat_min:.2f} / "
-              f"lon = {self.lon_min:.2f}) "
-              f"to max profile index {self.prof_max:d} "
-              f"(lat = {self.lat_max:.2f} / "
-              f"lon = {self.lon_max:.2f})")
+        print(
+            f"\tFrom min profile index {self.prof_min:d} "
+            f"(lat = {self.lat_min:.2f} / "
+            f"lon = {self.lon_min:.2f}) "
+            f"to max profile index {self.prof_max:d} "
+            f"(lat = {self.lat_max:.2f} / "
+            f"lon = {self.lon_max:.2f})"
+        )
 
     def get_data(self, key, do_fillvalue=True):
         """
@@ -389,7 +424,7 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
                 key,
                 self.prof_min if var_of_profiles else None,
                 self.prof_max if var_of_profiles else None,
-                'profindex',
+                "profindex",
                 do_fillvalue,
             )
 
@@ -397,67 +432,73 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
             data = self._get_par_ab532(do_fillvalue)
 
         elif key == "Molecular_Total_Attenuated_Backscatter_532":
-            data, _ = self._get_molecular_profiles(532, '', do_fillvalue)
+            data, _ = self._get_molecular_profiles(532, "", do_fillvalue)
         elif key == "Molecular_Parallel_Attenuated_Backscatter_532":
-            data, _ = self._get_molecular_profiles(532, 'par', do_fillvalue)
+            data, _ = self._get_molecular_profiles(532, "par", do_fillvalue)
         elif key == "Molecular_Perpendicular_Attenuated_Backscatter_532":
-            data, _ = self._get_molecular_profiles(532, 'per', do_fillvalue)
+            data, _ = self._get_molecular_profiles(532, "per", do_fillvalue)
         elif key == "Molecular_Attenuated_Backscatter_1064":
-            data, _ = self._get_molecular_profiles(1064, '', do_fillvalue)
+            data, _ = self._get_molecular_profiles(1064, "", do_fillvalue)
 
         elif key == "Molecular_Total_Backscatter_532":
-            _, data = self._get_molecular_profiles(532, '', do_fillvalue)
+            _, data = self._get_molecular_profiles(532, "", do_fillvalue)
         elif key == "Molecular_Parallel_Backscatter_532":
-            _, data = self._get_molecular_profiles(532, 'par', do_fillvalue)
+            _, data = self._get_molecular_profiles(532, "par", do_fillvalue)
         elif key == "Molecular_Perpendicular_Backscatter_532":
-            _, data = self._get_molecular_profiles(532, 'per', do_fillvalue)
+            _, data = self._get_molecular_profiles(532, "per", do_fillvalue)
         elif key == "Molecular_Backscatter_1064":
-            _, data = self._get_molecular_profiles(1064, '', do_fillvalue)
+            _, data = self._get_molecular_profiles(1064, "", do_fillvalue)
 
         #### Compute NSF in beta' domain (NSF in level 1B data is in V = P / Ga domain)
         elif key == "Noise_Scale_Factor_532_Parallel_AB_domain":
-            data = self._get_nsf_in_ab_domain(532, 'par', do_fillvalue)
+            data = self._get_nsf_in_ab_domain(532, "par", do_fillvalue)
         elif key == "Noise_Scale_Factor_532_Perpendicular_AB_domain":
-            data = self._get_nsf_in_ab_domain(532, 'per', do_fillvalue)
+            data = self._get_nsf_in_ab_domain(532, "per", do_fillvalue)
         elif key == "Noise_Scale_Factor_1064_AB_domain":
-            data = self._get_nsf_in_ab_domain(1064, '', do_fillvalue)
+            data = self._get_nsf_in_ab_domain(1064, "", do_fillvalue)
 
         #### Compute RMS in beta' domain (RMS in level 1B data is in P domain)
         elif key == "Parallel_RMS_Baseline_532_AB_domain":
-            data = self._get_rms_in_ab_domain(532, 'par', do_fillvalue)
+            data = self._get_rms_in_ab_domain(532, "par", do_fillvalue)
         elif key == "Perpendicular_RMS_Baseline_532_AB_domain":
-            data = self._get_rms_in_ab_domain(532, 'per', do_fillvalue)
+            data = self._get_rms_in_ab_domain(532, "per", do_fillvalue)
         elif key == "RMS_Baseline_1064_AB_domain":
-            data = self._get_rms_in_ab_domain(1064, '', do_fillvalue)
+            data = self._get_rms_in_ab_domain(1064, "", do_fillvalue)
 
         #### Compute range-dependent uncertainty based on molecular model
         elif key == "Shot_Noise_532_Parallel":
-            data = self._get_shotnoise(532, 'par', do_fillvalue)
+            data = self._get_shotnoise(532, "par", do_fillvalue)
         elif key == "Shot_Noise_532_Perpendicular":
-            data = self._get_shotnoise(532, 'per', do_fillvalue)
+            data = self._get_shotnoise(532, "per", do_fillvalue)
         elif key == "Shot_Noise_1064":
-            data = self._get_shotnoise(1064, '', do_fillvalue)
+            data = self._get_shotnoise(1064, "", do_fillvalue)
 
         #### Compute range-independent uncertainty from background RMS ####
         elif key == "Background_Noise_532_Parallel":
-            data = self._get_backgroundnoise(532, 'par', do_fillvalue)
+            data = self._get_backgroundnoise(532, "par", do_fillvalue)
         elif key == "Background_Noise_532_Perpendicular":
-            data = self._get_backgroundnoise(532, 'per', do_fillvalue)
+            data = self._get_backgroundnoise(532, "per", do_fillvalue)
         elif key == "Background_Noise_1064":
-            data = self._get_backgroundnoise(1064, '', do_fillvalue)
+            data = self._get_backgroundnoise(1064, "", do_fillvalue)
 
         #### Compute scattering ratio uncertainty standard deviation ####
-        elif key == "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Parallel":
-            shotnoise_532_par = self._get_shotnoise(532, 'par', do_fillvalue)
-            bkgnoise_532_par = self._get_backgroundnoise(532, 'par', do_fillvalue)
+        elif (
+            key
+            == "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Parallel"
+        ):
+            shotnoise_532_par = self._get_shotnoise(532, "par", do_fillvalue)
+            bkgnoise_532_par = self._get_backgroundnoise(532, "par", do_fillvalue)
             data = np.sqrt(shotnoise_532_par**2 + bkgnoise_532_par**2)
-        elif key == "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Perpendicular":
-            shotnoise_532_per = self._get_shotnoise(532, 'per', do_fillvalue)
-            bkgnoise_532_per = self._get_backgroundnoise(532, 'per', do_fillvalue)
+        elif (
+            key
+            == "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Perpendicular"
+        ):
+            shotnoise_532_per = self._get_shotnoise(532, "per", do_fillvalue)
+            bkgnoise_532_per = self._get_backgroundnoise(532, "per", do_fillvalue)
             data = np.sqrt(shotnoise_532_per**2 + bkgnoise_532_per**2)
         elif key == "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_1064":
-            shotnoise_1064 = self._get_shotnoise(1064, '', do_fillvalue)
-            bkgnoise_1064 = self._get_backgroundnoise(1064, '', do_fillvalue)
+            shotnoise_1064 = self._get_shotnoise(1064, "", do_fillvalue)
+            bkgnoise_1064 = self._get_backgroundnoise(1064, "", do_fillvalue)
             data = np.sqrt(shotnoise_1064**2 + bkgnoise_1064**2)
         else:
             raise Exception(f"Error: unknown key = {key}.\n")
@@ -470,24 +511,27 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         if key == "Lidar_Data_Altitudes":
             if data.size == NUMBER_OF_VERTICAL_BINS:
                 data = alt_to_regular_30m_vertical_grid(data)
-                data = data[:self.index30m_alt_max]
+                data = data[: self.index30m_alt_max]
         elif data.ndim == 1:
             # No vertical averaging for 1D data
             pass
         elif data.ndim == 2:
             if data.shape[1] == NUMBER_OF_VERTICAL_BINS:
                 data = shape_to_regular_30m_vertical_grid(data)
-                data = data[:, :self.index30m_alt_max]
-                data = from_30mx333m_to_new_resolution(data, self.vgrid, self.hgrid, self.prof_min)
+                data = data[:, : self.index30m_alt_max]
+                data = from_30mx333m_to_new_resolution(
+                    data, self.vgrid, self.hgrid, self.prof_min
+                )
             elif data.shape[1] == NUMBER_OF_VERTICAL_BINS_MET:
                 if key == "Temperature":
                     data = self._interp_temperature(data, do_fillvalue)
                     data = shape_to_regular_30m_vertical_grid(data)
-                    data = data[:, :self.index30m_alt_max]
-                    data = from_30mx333m_to_new_resolution(data, self.vgrid, self.hgrid, self.prof_min)
+                    data = data[:, : self.index30m_alt_max]
+                    data = from_30mx333m_to_new_resolution(
+                        data, self.vgrid, self.hgrid, self.prof_min
+                    )
         else:
             raise Exception(f"Error: key = {key} with ndim ≥ 3 not implemented yet.\n")
-
 
         return self._as_dataarray(key, data, attributes)
 
