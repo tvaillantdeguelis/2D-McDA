@@ -30,7 +30,7 @@ def run_granule_pipeline(cfg):
     start_tic = time.perf_counter()
     print(f"\nStart time: {start_time}")
 
-    with timer("Locate current and neighboring CALIOP files"):
+    with timer("Resolve processing configuration and locate CALIOP files"):
         processing_request = resolve_processing_request(cfg)
 
     with timer("Open current CALIOP granule"):

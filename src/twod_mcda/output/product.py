@@ -7,7 +7,6 @@ import numpy as np
 from twod_mcda.caliop.constants import CALIOP_L1_PRODUCT_TYPE, FILL_VALUE_FLOAT
 from twod_mcda.output.netcdf import NetCDFVariable, write_netcdf
 
-
 PROFILE_DIMENSION = "Profile_ID"
 ALTITUDE_DIMENSION = "Altitude"
 PROFILE_COORDINATES = "Profile_Time Latitude Longitude"
@@ -126,10 +125,22 @@ def build_output_variables(result, save_development_data):
     }
 
     masks = (
-        ("feature_mask_532_par", "Parallel_Detection_Flags_532", "532 nm parallel-channel detection flags"),
-        ("feature_mask_532_per", "Perpendicular_Detection_Flags_532", "532 nm perpendicular-channel detection flags"),
+        (
+            "feature_mask_532_par",
+            "Parallel_Detection_Flags_532",
+            "532 nm parallel-channel detection flags",
+        ),
+        (
+            "feature_mask_532_per",
+            "Perpendicular_Detection_Flags_532",
+            "532 nm perpendicular-channel detection flags",
+        ),
         ("feature_mask_1064", "Detection_Flags_1064", "1064 nm detection flags"),
-        ("feature_mask_merged", "Composite_Detection_Flags", "composite three-channel detection flags"),
+        (
+            "feature_mask_merged",
+            "Composite_Detection_Flags",
+            "composite three-channel detection flags",
+        ),
     )
     for key, name, long_name in masks:
         if name == "Composite_Detection_Flags":
@@ -160,9 +171,21 @@ def build_output_variables(result, save_development_data):
 
     development = result.development
     transmittances = (
-        ("twoway_transmittance_532_par", "Parallel_CumulativeTwoWayTransmittance_532", "532 nm parallel cumulative two-way transmittance"),
-        ("twoway_transmittance_532_per", "Perpendicular_CumulativeTwoWayTransmittance_532", "532 nm perpendicular cumulative two-way transmittance"),
-        ("twoway_transmittance_1064", "CumulativeTwoWayTransmittance_1064", "1064 nm cumulative two-way transmittance"),
+        (
+            "twoway_transmittance_532_par",
+            "Parallel_CumulativeTwoWayTransmittance_532",
+            "532 nm parallel cumulative two-way transmittance",
+        ),
+        (
+            "twoway_transmittance_532_per",
+            "Perpendicular_CumulativeTwoWayTransmittance_532",
+            "532 nm perpendicular cumulative two-way transmittance",
+        ),
+        (
+            "twoway_transmittance_1064",
+            "CumulativeTwoWayTransmittance_1064",
+            "1064 nm cumulative two-way transmittance",
+        ),
     )
     for key, name, long_name in transmittances:
         variables[key] = _variable(
@@ -177,12 +200,48 @@ def build_output_variables(result, save_development_data):
         )
 
     step_variables = (
-        ("feature_mask_532_par_steps", "Parallel_Detection_Flags_532_steps", "Step_532_par", None, "intermediate 532 nm parallel-channel detection flags"),
-        ("feature_mask_532_per_steps", "Perpendicular_Detection_Flags_532_steps", "Step_532_per", None, "intermediate 532 nm perpendicular-channel detection flags"),
-        ("feature_mask_1064_steps", "Detection_Flags_1064_steps", "Step_1064", None, "intermediate 1064 nm detection flags"),
-        ("atsr_532_par_steps", "Parallel_Attenuated_Scattering_Ratio_532_steps", "Step_532_par", FILL_VALUE_FLOAT, "intermediate 532 nm parallel attenuated scattering ratio"),
-        ("atsr_532_per_steps", "Perpendicular_Attenuated_Scattering_Ratio_532_steps", "Step_532_per", FILL_VALUE_FLOAT, "intermediate 532 nm perpendicular attenuated scattering ratio"),
-        ("atsr_1064_steps", "Attenuated_Scattering_Ratio_1064_steps", "Step_1064", FILL_VALUE_FLOAT, "intermediate 1064 nm attenuated scattering ratio"),
+        (
+            "feature_mask_532_par_steps",
+            "Parallel_Detection_Flags_532_steps",
+            "Step_532_par",
+            None,
+            "intermediate 532 nm parallel-channel detection flags",
+        ),
+        (
+            "feature_mask_532_per_steps",
+            "Perpendicular_Detection_Flags_532_steps",
+            "Step_532_per",
+            None,
+            "intermediate 532 nm perpendicular-channel detection flags",
+        ),
+        (
+            "feature_mask_1064_steps",
+            "Detection_Flags_1064_steps",
+            "Step_1064",
+            None,
+            "intermediate 1064 nm detection flags",
+        ),
+        (
+            "atsr_532_par_steps",
+            "Parallel_Attenuated_Scattering_Ratio_532_steps",
+            "Step_532_par",
+            FILL_VALUE_FLOAT,
+            "intermediate 532 nm parallel attenuated scattering ratio",
+        ),
+        (
+            "atsr_532_per_steps",
+            "Perpendicular_Attenuated_Scattering_Ratio_532_steps",
+            "Step_532_per",
+            FILL_VALUE_FLOAT,
+            "intermediate 532 nm perpendicular attenuated scattering ratio",
+        ),
+        (
+            "atsr_1064_steps",
+            "Attenuated_Scattering_Ratio_1064_steps",
+            "Step_1064",
+            FILL_VALUE_FLOAT,
+            "intermediate 1064 nm attenuated scattering ratio",
+        ),
     )
     for key, name, step_dimension, fill_value, long_name in step_variables:
         flag_attributes = {}
@@ -209,16 +268,15 @@ def build_output_variables(result, save_development_data):
 def output_filename(request, result):
     """Return the netCDF product filename."""
 
-    whole_file = (
-        not request.subset_active
-        or (
-            request.subset_start in (None, 0)
-            and request.subset_end is None
-            and request.subset_mode == "profindex"
-        )
+    whole_file = not request.subset_active or (
+        request.subset_start in (None, 0)
+        and request.subset_end is None
+        and request.subset_mode == "profindex"
     )
-    suffix = "" if whole_file else (
-        f"_lon_{result.longitude_min:.2f}_{result.longitude_max:.2f}"
+    suffix = (
+        ""
+        if whole_file
+        else (f"_lon_{result.longitude_min:.2f}_{result.longitude_max:.2f}")
     )
     version = request.output_version.replace(".", "-")
     return (
@@ -242,9 +300,7 @@ def _utc_datetime(value):
     month = encoded_date // 100 % 100
     day = encoded_date % 100
     fraction = float(value) - encoded_date
-    return datetime(year, month, day, tzinfo=timezone.utc) + timedelta(
-        days=fraction
-    )
+    return datetime(year, month, day, tzinfo=timezone.utc) + timedelta(days=fraction)
 
 
 def _global_attributes(request, result, filename):
@@ -259,8 +315,7 @@ def _global_attributes(request, result, filename):
         "id": filename,
         "naming_authority": "org.github.tvaillantdeguelis",
         "source": (
-            f"CALIOP Level 1 {CALIOP_L1_PRODUCT_TYPE} "
-            f"{request.caliop_version}"
+            f"CALIOP Level 1 {CALIOP_L1_PRODUCT_TYPE} " f"{request.caliop_version}"
         ),
         "processing_level": "L2",
         "product_version": request.output_version,
@@ -301,12 +356,8 @@ def _global_attributes(request, result, filename):
         except (OverflowError, ValueError):
             pass
         else:
-            attributes["time_coverage_start"] = start.isoformat().replace(
-                "+00:00", "Z"
-            )
-            attributes["time_coverage_end"] = end.isoformat().replace(
-                "+00:00", "Z"
-            )
+            attributes["time_coverage_start"] = start.isoformat().replace("+00:00", "Z")
+            attributes["time_coverage_end"] = end.isoformat().replace("+00:00", "Z")
 
     return attributes
 

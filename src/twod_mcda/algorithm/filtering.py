@@ -44,7 +44,7 @@ def apply_surface_detection(feature, surf_alt_index):
         # If surface detected
         if surf_alt_index[i] != 999:
             # Put flag from lowest bin to surface altitude
-            new_feature[i, :surf_alt_index[i]+1] = FLAG_SURFACE
+            new_feature[i, : surf_alt_index[i] + 1] = FLAG_SURFACE
 
     return new_feature
 
@@ -56,75 +56,103 @@ def apply_threshold(k, feature, sr, sr_sigma, where_FA=False):
     new_feature = np.ma.copy(feature)
 
     # Define threshold
-    sr_maybe = 1 + k*sr_sigma
+    sr_maybe = 1 + k * sr_sigma
 
     if where_FA:
         # Put flag where ATSR > threshold and where ATSR is not masked
-        new_feature[np.ma.where(sr>sr_maybe)] = FLAG_MAYBE
+        new_feature[np.ma.where(sr > sr_maybe)] = FLAG_MAYBE
     else:
         # Put flag where ATSR > threshold and where feature is still "nothing"
-        new_feature[np.ma.where((sr>sr_maybe) &\
-                            (new_feature==FLAG_NOTHING))] = FLAG_MAYBE
+        new_feature[np.ma.where((sr > sr_maybe) & (new_feature == FLAG_NOTHING))] = (
+            FLAG_MAYBE
+        )
 
     return new_feature
 
 
 @jit(nopython=True)
-def apply_window_jit(w_side, h_side, feature, nb_pixels_window, min_percent, detected_pixels,
-                     FLAG_DETECTION_LEVEL):
+def apply_window_jit(
+    w_side,
+    h_side,
+    feature,
+    nb_pixels_window,
+    min_percent,
+    detected_pixels,
+    FLAG_DETECTION_LEVEL,
+):
     """Part extracted from apply_window function for faster processing with
     @jit"""
 
-    for i in np.arange(w_side, feature.shape[0]-w_side):
-        for j in np.arange(h_side, feature.shape[1]-h_side):
-            if (feature[i, j]==FLAG_NOTHING) | (feature[i, j]==FLAG_MAYBE):
+    for i in np.arange(w_side, feature.shape[0] - w_side):
+        for j in np.arange(h_side, feature.shape[1] - h_side):
+            if (feature[i, j] == FLAG_NOTHING) | (feature[i, j] == FLAG_MAYBE):
                 # Tuple with indexes of the window
-                window = (slice(i-w_side, i+w_side+1), 
-                          slice(j-h_side, j+h_side+1))
+                window = (
+                    slice(i - w_side, i + w_side + 1),
+                    slice(j - h_side, j + h_side + 1),
+                )
 
                 # Count nb of "maybe"
                 nb_maybe = list(feature[window].flatten()).count(FLAG_MAYBE)
 
                 # Count nb of "previous detection level" (d-1)
                 nb_detected_1 = 0
-                if FLAG_DETECTION_LEVEL > 1: # if previous detection exists
-                    prev_FLAG_DETECTION_LEVEL = FLAG_DETECTION_LEVEL-1
-                    nb_detected_1 = list(feature[window].flatten()).count(prev_FLAG_DETECTION_LEVEL)
-                
+                if FLAG_DETECTION_LEVEL > 1:  # if previous detection exists
+                    prev_FLAG_DETECTION_LEVEL = FLAG_DETECTION_LEVEL - 1
+                    nb_detected_1 = list(feature[window].flatten()).count(
+                        prev_FLAG_DETECTION_LEVEL
+                    )
+
                 # Total detected at n and n-1
                 nb_tot = nb_maybe + nb_detected_1
 
-                # Count nb of special (and detection <= d-2) and remove 
+                # Count nb of special (and detection <= d-2) and remove
                 # from nb_pixels_window
                 nb_surface = list(feature[window].flatten()).count(FLAG_SURFACE)
-                nb_likely_artifact = list(feature[window].flatten()).count(FLAG_LIKELY_ARTIFACT)
+                nb_likely_artifact = list(feature[window].flatten()).count(
+                    FLAG_LIKELY_ARTIFACT
+                )
                 nb_FA = list(feature[window].flatten()).count(FLAG_FA)
                 nb_AFA = list(feature[window].flatten()).count(FLAG_AFA)
-                nb_small_strips = list(feature[window].flatten()).count(FLAG_SMALL_STRIPS)
+                nb_small_strips = list(feature[window].flatten()).count(
+                    FLAG_SMALL_STRIPS
+                )
                 nb_detected_2_and_before = 0
-                if FLAG_DETECTION_LEVEL > 1: # if previous detection exists
-                    for prev_FLAG_DETECTION_LEVEL in np.arange(1, FLAG_DETECTION_LEVEL-1):
-                        nb_detected_2_and_before += list(feature[window].flatten()).\
-                                      count(prev_FLAG_DETECTION_LEVEL)
-                nb_pixels_window_2 = nb_pixels_window - nb_FA - nb_AFA - nb_surface - \
-                                     nb_likely_artifact - nb_small_strips - nb_detected_2_and_before
+                if FLAG_DETECTION_LEVEL > 1:  # if previous detection exists
+                    for prev_FLAG_DETECTION_LEVEL in np.arange(
+                        1, FLAG_DETECTION_LEVEL - 1
+                    ):
+                        nb_detected_2_and_before += list(
+                            feature[window].flatten()
+                        ).count(prev_FLAG_DETECTION_LEVEL)
+                nb_pixels_window_2 = (
+                    nb_pixels_window
+                    - nb_FA
+                    - nb_AFA
+                    - nb_surface
+                    - nb_likely_artifact
+                    - nb_small_strips
+                    - nb_detected_2_and_before
+                )
 
                 # Flag detected if amount above limit
-                nb_min_tot = nb_pixels_window_2*min_percent
-                if (nb_tot >= nb_min_tot):
+                nb_min_tot = nb_pixels_window_2 * min_percent
+                if nb_tot >= nb_min_tot:
                     detected_pixels[i, j] = 1
-    
+
     return feature
 
 
-def apply_window(height_window, width_window, feature, FLAG_DETECTION_LEVEL, min_percent=0.5):
+def apply_window(
+    height_window, width_window, feature, FLAG_DETECTION_LEVEL, min_percent=0.5
+):
     # min_percent: min pourcentage of total counted pixels in the window to flag the center as "detected"
 
     # Initialization
     new_feature, feature_mask = feature_for_numba(feature)
 
     # height_window and width_window should be odd numbers
-    if (height_window%2 != 1) | (width_window%2 != 1):
+    if (height_window % 2 != 1) | (width_window % 2 != 1):
         raise ValueError(
             f"height_window (= {height_window}) and width_window "
             f"(= {width_window}) should be odd numbers"
@@ -133,25 +161,33 @@ def apply_window(height_window, width_window, feature, FLAG_DETECTION_LEVEL, min
     # Initialization
     detected_pixels = np.zeros(new_feature.shape, dtype=bool)
     nb_pixels_window = width_window * height_window
-    h_side = int(height_window/2) # nb of pixel each side of the center
-    w_side = int(width_window/2) # nb of pixel each side of the center
+    h_side = int(height_window / 2)  # nb of pixel each side of the center
+    w_side = int(width_window / 2)  # nb of pixel each side of the center
 
     # Apply moving window
-    new_feature = apply_window_jit(w_side, h_side, new_feature, nb_pixels_window, min_percent,
-                                   detected_pixels, FLAG_DETECTION_LEVEL)
+    new_feature = apply_window_jit(
+        w_side,
+        h_side,
+        new_feature,
+        nb_pixels_window,
+        min_percent,
+        detected_pixels,
+        FLAG_DETECTION_LEVEL,
+    )
 
     # Remove previous "maybe" pixels (or not if keep_all==True)
-    new_feature[new_feature==FLAG_MAYBE] = FLAG_NOTHING
+    new_feature[new_feature == FLAG_MAYBE] = FLAG_NOTHING
 
     # Replace by those which result from the windowing
-    new_feature[detected_pixels==1] = FLAG_MAYBE
+    new_feature[detected_pixels == 1] = FLAG_MAYBE
 
-    return np.ma.array(new_feature, mask=feature_mask)  
+    return np.ma.array(new_feature, mask=feature_mask)
 
 
 @jit(nopython=True)
-def replace_maybe_jit(nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL,
-                      prev_detect, prevprev_detect):
+def replace_maybe_jit(
+    nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL, prev_detect, prevprev_detect
+):
     """Classify connected components containing ``FLAG_MAYBE`` pixels.
 
     The queue is allocated once and reused for every component.  Besides
@@ -191,8 +227,7 @@ def replace_maybe_jit(nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL,
                     or feature[left, col] == FLAG_SMALL_STRIPS
                 ):
                     left -= 1
-                if (left >= 0
-                        and feature[left, col] == FLAG_DETECTION_LEVEL):
+                if left >= 0 and feature[left, col] == FLAG_DETECTION_LEVEL:
                     connected_to_detected_pattern = True
 
                 # Test the four directly adjacent pixels without allocating a
@@ -209,19 +244,24 @@ def replace_maybe_jit(nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL,
                     else:
                         neighbor_col -= 1
 
-                    if (neighbor_row < 0 or neighbor_row >= nb_rows
-                            or neighbor_col < 0 or neighbor_col >= nb_cols
-                            or seen_pixels[neighbor_row, neighbor_col]):
+                    if (
+                        neighbor_row < 0
+                        or neighbor_row >= nb_rows
+                        or neighbor_col < 0
+                        or neighbor_col >= nb_cols
+                        or seen_pixels[neighbor_row, neighbor_col]
+                    ):
                         continue
 
                     neighbor_value = feature[neighbor_row, neighbor_col]
                     is_accessible = neighbor_value == FLAG_MAYBE
                     if FLAG_DETECTION_LEVEL > 1:
-                        if (prev_detect
-                                and neighbor_value == FLAG_DETECTION_LEVEL - 1):
+                        if prev_detect and neighbor_value == FLAG_DETECTION_LEVEL - 1:
                             is_accessible = True
-                        if (prevprev_detect
-                                and neighbor_value == FLAG_DETECTION_LEVEL - 2):
+                        if (
+                            prevprev_detect
+                            and neighbor_value == FLAG_DETECTION_LEVEL - 2
+                        ):
                             is_accessible = True
 
                     if is_accessible:
@@ -245,8 +285,9 @@ def replace_maybe_jit(nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL,
     return feature
 
 
-def replace_maybe(n, feature, FLAG_DETECTION_LEVEL, prev_detect=True,
-                  prevprev_detect=False):
+def replace_maybe(
+    n, feature, FLAG_DETECTION_LEVEL, prev_detect=True, prevprev_detect=False
+):
     """Put flag 'FLAG_DETECTION_LEVEL' where patterns of connected 'FLAG_MAYBE'
     pixels consist of at least n pixels
     if prev_detect=True means that we also count detection pixels n-1
@@ -257,14 +298,20 @@ def replace_maybe(n, feature, FLAG_DETECTION_LEVEL, prev_detect=True,
 
     # Initialization
     seen_pixels = np.zeros(new_feature.shape, dtype=bool)
-    
+
     # Look for a "maybe" pixel and decide if it's really part of a pattern
     # based on nb of neighbors (neighbors in "level n" + "level n-1")
-    if n == 1: # keep all
-        new_feature[new_feature==FLAG_MAYBE] = FLAG_DETECTION_LEVEL
+    if n == 1:  # keep all
+        new_feature[new_feature == FLAG_MAYBE] = FLAG_DETECTION_LEVEL
     else:
-        new_feature = replace_maybe_jit(n, new_feature, seen_pixels, FLAG_DETECTION_LEVEL,
-                                        prev_detect, prevprev_detect)
+        new_feature = replace_maybe_jit(
+            n,
+            new_feature,
+            seen_pixels,
+            FLAG_DETECTION_LEVEL,
+            prev_detect,
+            prevprev_detect,
+        )
 
     return np.ma.array(new_feature, mask=feature_mask)
 
@@ -284,21 +331,24 @@ def fill_likely_artifact(params, feature, FLAG_VERY_HIGH_ECHO):
             # Look for FLAG_VERY_HIGH_ECHO
             if new_feature[i, j] == FLAG_VERY_HIGH_ECHO:
                 # If FLAG_VERY_HIGH_ECHO at the very bottom
-                if j==0: 
+                if j == 0:
                     # Nothing to flag below
                     continue
                 # If bin below is FLAG_VERY_HIGH_ECHO
-                elif new_feature[i, j-1] == FLAG_VERY_HIGH_ECHO:
+                elif new_feature[i, j - 1] == FLAG_VERY_HIGH_ECHO:
                     # Same layer, already done
                     continue
                 # Else, flag below on the params.nb_bins_PMT_artifact extent
                 else:
                     # Go down
                     j2 = j - 1
-                    while (j2 >= 0) & (j - j2 <= params.nb_bins_PMT_artifact) &\
-                          (new_feature[i, j2] == FLAG_NOTHING):
+                    while (
+                        (j2 >= 0)
+                        & (j - j2 <= params.nb_bins_PMT_artifact)
+                        & (new_feature[i, j2] == FLAG_NOTHING)
+                    ):
                         new_feature[i, j2] = FLAG_LIKELY_ARTIFACT
-                        j2 -= 1 
+                        j2 -= 1
 
     return new_feature
 
@@ -337,8 +387,10 @@ def fill_fully_attenuated(feature):
             # From lowest altitude go up until reaching a layer
             j = 0
             # While layer not reached
-            while ((new_feature[i, j] == FLAG_NOTHING) |\
-                   (new_feature[i, j] == FLAG_LIKELY_ARTIFACT)) & (j < nb_alt):
+            while (
+                (new_feature[i, j] == FLAG_NOTHING)
+                | (new_feature[i, j] == FLAG_LIKELY_ARTIFACT)
+            ) & (j < nb_alt):
                 # Flag 'Fully Attenuated'
                 new_feature[i, j] = FLAG_FA
                 j += 1
@@ -353,11 +405,11 @@ def fill_fully_attenuated(feature):
 
 
 def FLAG_WEAK_SIGNAL(params, feature, sr, sr_sigma):
-    """Flag where, between detected layers, more than ratio_nb are below 
+    """Flag where, between detected layers, more than ratio_nb are below
     sr_thresold"""
 
     # Initialization
-    sr_thresold = sr_sigma*params.weak_signal_ratio_threshold
+    sr_thresold = sr_sigma * params.weak_signal_ratio_threshold
     nb_prof = feature.shape[0]
     nb_alt = feature.shape[1]
     new_feature = np.ma.copy(feature)
@@ -365,27 +417,27 @@ def FLAG_WEAK_SIGNAL(params, feature, sr, sr_sigma):
     # Loop on profiles
     for i in np.arange(nb_prof):
         # From lowest altitude go up
-        nb_below = 0 # nb ranges below threshold
-        nb_tot = 0 # total nb ranges in the region between 2 layers
+        nb_below = 0  # nb ranges below threshold
+        nb_tot = 0  # total nb ranges in the region between 2 layers
         j = 0
         # While top not reached
-        while j < nb_alt: 
+        while j < nb_alt:
             if new_feature[i, j] != FLAG_NOTHING:
-                j += 1 # not yet in region with no detection
+                j += 1  # not yet in region with no detection
                 continue
-            cs_min_index = j # min index of the "CS" region
+            cs_min_index = j  # min index of the "CS" region
             while new_feature[i, j] == FLAG_NOTHING:
-                nb_tot +=1
-                if sr[i,j] < sr_thresold[i,j]:
+                nb_tot += 1
+                if sr[i, j] < sr_thresold[i, j]:
                     nb_below += 1
                 j += 1
-                if (j >= nb_alt): # if reach top of column
+                if j >= nb_alt:  # if reach top of column
                     break
-            cs_max_index = j-1 # max index of the "CS" region
+            cs_max_index = j - 1  # max index of the "CS" region
             # If fraction_nb_below_threshold below limit put flag in this region
-            if nb_below/nb_tot > params.weak_signal_ratio:
-                if cs_max_index < nb_alt - 1: # not if no layer above
-                    new_feature[i, cs_min_index:cs_max_index+1] = FLAG_AFA
+            if nb_below / nb_tot > params.weak_signal_ratio:
+                if cs_max_index < nb_alt - 1:  # not if no layer above
+                    new_feature[i, cs_min_index : cs_max_index + 1] = FLAG_AFA
             nb_below = 0
             nb_tot = 0
 
@@ -394,7 +446,7 @@ def FLAG_WEAK_SIGNAL(params, feature, sr, sr_sigma):
 
 @jit(nopython=True)
 def fill_small_strips_jit(feature, nb_prof_min):
-    """Part extracted from fill_small_strips function for faster processing 
+    """Part extracted from fill_small_strips function for faster processing
     with @jit"""
 
     # Initialization
@@ -406,23 +458,28 @@ def fill_small_strips_jit(feature, nb_prof_min):
         # From bottom go up
         for j in np.arange(nb_alt):
             # If not the right end of the image
-            if i < nb_prof - 3: 
+            if i < nb_prof - 3:
                 # If (A)FA, Likely artifact at prof i but not at prof i+1
-                if ( (feature[i,j] == FLAG_FA) |\
-                     (feature[i,j] == FLAG_AFA) |\
-                     (feature[i,j] == FLAG_LIKELY_ARTIFACT) ) &\
-                   ( (feature[i+1,j] != FLAG_FA) &\
-                     (feature[i+1,j] != FLAG_AFA) &\
-                     (feature[i+1,j] != FLAG_LIKELY_ARTIFACT) ):
-                    # Look right if there is (A)FA or Likely artifact at 
+                if (
+                    (feature[i, j] == FLAG_FA)
+                    | (feature[i, j] == FLAG_AFA)
+                    | (feature[i, j] == FLAG_LIKELY_ARTIFACT)
+                ) & (
+                    (feature[i + 1, j] != FLAG_FA)
+                    & (feature[i + 1, j] != FLAG_AFA)
+                    & (feature[i + 1, j] != FLAG_LIKELY_ARTIFACT)
+                ):
+                    # Look right if there is (A)FA or Likely artifact at
                     # less than nb_prof_min
                     i2 = i + 1
                     nb_prof_strip = 1
                     less_than_nb_prof_min = False
-                    while (nb_prof_strip <= nb_prof_min) & (i2 <= nb_prof-1):
-                        if (feature[i2,j] == FLAG_FA) |\
-                           (feature[i2,j] == FLAG_AFA) |\
-                           (feature[i2,j] == FLAG_LIKELY_ARTIFACT):
+                    while (nb_prof_strip <= nb_prof_min) & (i2 <= nb_prof - 1):
+                        if (
+                            (feature[i2, j] == FLAG_FA)
+                            | (feature[i2, j] == FLAG_AFA)
+                            | (feature[i2, j] == FLAG_LIKELY_ARTIFACT)
+                        ):
                             less_than_nb_prof_min = True
                             break
                         i2 += 1
@@ -430,8 +487,9 @@ def fill_small_strips_jit(feature, nb_prof_min):
                     # If there is (A)FA at less than nb_prof_min far
                     if less_than_nb_prof_min:
                         # Put "Low confidence small strips" flag between
-                        feature[i+1:i2, j][feature[i+1:i2, j] == FLAG_NOTHING] =\
-                            FLAG_SMALL_STRIPS
+                        feature[i + 1 : i2, j][
+                            feature[i + 1 : i2, j] == FLAG_NOTHING
+                        ] = FLAG_SMALL_STRIPS
 
     return feature
 
@@ -441,9 +499,7 @@ def fill_small_strips(params, feature):
 
     feature_mask = np.ma.getmaskarray(feature)
 
-    new_feature = np.asarray(
-        np.ma.getdata(feature)
-    ).copy()
+    new_feature = np.asarray(np.ma.getdata(feature)).copy()
 
     # Valeur exclue des traitements dans la fonction JIT.
     new_feature[feature_mask] = FLAG_SURFACE
@@ -472,12 +528,14 @@ def average_below_8_2(sr, sr_sigma):
     """Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)"""
 
     # Initialization
-    new_sr = np.ma.copy(sr)  
-    nb_prof = sr.shape[0] 
-    nb_bins_below_8_2km = N_30M_BINS_PER_BIN_R1*N_BINS_R1+N_30M_BINS_PER_BIN_R2*N_BINS_R2
+    new_sr = np.ma.copy(sr)
+    nb_prof = sr.shape[0]
+    nb_bins_below_8_2km = (
+        N_30M_BINS_PER_BIN_R1 * N_BINS_R1 + N_30M_BINS_PER_BIN_R2 * N_BINS_R2
+    )
 
     # Look for horizontal offset if 1st profile not the start of a 1-km profile
-    index_vertical_bin = 100 # random bin in the R2 region 
+    index_vertical_bin = 100  # random bin in the R2 region
     if sr[0, index_vertical_bin] == sr[1, index_vertical_bin]:
         if sr[1, index_vertical_bin] == sr[2, index_vertical_bin]:
             offset_h = 0
@@ -487,18 +545,18 @@ def average_below_8_2(sr, sr_sigma):
         offset_h = 1
 
     # Average 60 m × 1 km (2 verticals × 3 horizontals)
-    i_array = np.arange(offset_h, nb_prof-2, 3) # 3 horizontals
-    j_array = np.arange(0, nb_bins_below_8_2km, 2) # 2 verticals
+    i_array = np.arange(offset_h, nb_prof - 2, 3)  # 3 horizontals
+    j_array = np.arange(0, nb_bins_below_8_2km, 2)  # 2 verticals
     i_progress = 0
     for i in i_array:
         for j in j_array:
-            new_sr[i:i+3, j:j+2] = np.ma.mean(sr[i:i+3, j:j+2])
-    
+            new_sr[i : i + 3, j : j + 2] = np.ma.mean(sr[i : i + 3, j : j + 2])
+
     # Remask where was already masked
     new_sr.mask = np.copy(sr.mask)
 
     # Adapt SR threshold below 8.2 km
-    sr_sigma[:nb_bins_below_8_2km] = sr_sigma[:nb_bins_below_8_2km]/np.sqrt(6)
+    sr_sigma[:nb_bins_below_8_2km] = sr_sigma[:nb_bins_below_8_2km] / np.sqrt(6)
 
     return new_sr, sr_sigma
 
@@ -528,8 +586,8 @@ def gaussian_2d_window(
     x = np.arange(width_window) - h_nside
     v_nside = np.int64((height_window - 1) / 2)
     y = np.arange(height_window) - v_nside
-    horizontal_gaussian = np.exp(-x**2 / (2 * horizontal_gauss_sigma**2))
-    vertical_gaussian = np.exp(-y**2 / (2 * vertical_gauss_sigma**2))
+    horizontal_gaussian = np.exp(-(x**2) / (2 * horizontal_gauss_sigma**2))
+    vertical_gaussian = np.exp(-(y**2) / (2 * vertical_gauss_sigma**2))
     nb_prof_averaged = np.sum(np.outer(horizontal_gaussian, vertical_gaussian))
 
     # Normalize by the locally available Gaussian weights so masked samples do

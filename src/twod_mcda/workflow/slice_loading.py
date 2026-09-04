@@ -3,11 +3,16 @@
 import numpy as np
 
 from twod_mcda.workflow.models import SliceData
-from twod_mcda.workflow.neighbors import append_adjacent_profiles, profiles_are_consecutive
+from twod_mcda.workflow.neighbors import (
+    append_adjacent_profiles,
+    profiles_are_consecutive,
+)
 from twod_mcda.caliop.input import read_slice
 
 
-def describe_slice(index, slice_count, profile_min, profile_max, context_min, context_max):
+def describe_slice(
+    index, slice_count, profile_min, profile_max, context_min, context_max
+):
     """Describe both the retained profiles and the full algorithm input."""
 
     return (

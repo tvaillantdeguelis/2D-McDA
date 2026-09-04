@@ -47,11 +47,7 @@ def load_config(filename):
     # kept in the final configuration dictionary.
     merged_config = base_config.copy()
     merged_config.update(
-        {
-            key: value
-            for key, value in config.items()
-            if key != "include"
-        }
+        {key: value for key, value in config.items() if key != "include"}
     )
 
     return merged_config

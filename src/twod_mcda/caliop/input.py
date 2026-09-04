@@ -41,14 +41,10 @@ def read_slice(granule, profile_start, profile_end):
     }
     altitude = arrays["Lidar_Data_Altitudes"]
     altitude_values = altitude.values
-    arrays["Lidar_Data_Altitudes"] = altitude.assign_coords(
-        altitude=altitude_values
-    )
+    arrays["Lidar_Data_Altitudes"] = altitude.assign_coords(altitude=altitude_values)
     for name, array in arrays.items():
         if "altitude" in array.dims:
             arrays[name] = array.assign_coords(altitude=altitude_values)
 
     dataset = xr.Dataset(arrays)
-    return dataset.set_coords(
-        ["Latitude", "Longitude", "Lidar_Data_Altitudes"]
-    )
+    return dataset.set_coords(["Latitude", "Longitude", "Lidar_Data_Altitudes"])

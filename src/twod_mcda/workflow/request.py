@@ -18,10 +18,7 @@ from twod_mcda.caliop.grids import alt_to_regular_30m_vertical_grid
 from twod_mcda.version import get_full_version
 from twod_mcda.workflow.models import ProcessingRequest
 
-
-_GRANULE_ID_PATTERN = re.compile(
-    r"\.(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z[DN])\.hdf$"
-)
+_GRANULE_ID_PATTERN = re.compile(r"\.(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z[DN])\.hdf$")
 
 
 def _granule_id(file_path):
@@ -67,9 +64,7 @@ def _altitude_index(max_altitude_km):
 
     regular_grid_altitudes = alt_to_regular_30m_vertical_grid(LIDAR_DATA_ALTITUDES)
 
-    index = int(
-        np.searchsorted(regular_grid_altitudes, max_altitude_km, side="right")
-    )
+    index = int(np.searchsorted(regular_grid_altitudes, max_altitude_km, side="right"))
 
     if index <= 0:
         raise ValueError(
@@ -102,17 +97,12 @@ def resolve_processing_request(cfg):
     processing_cfg = cfg.get("processing", {})
     output_cfg = cfg["output"]
     subset_cfg = cfg.get("subset")
-    subset_active = (
-        subset_cfg is not None
-        and subset_cfg.get("activate", True)
-    )
+    subset_active = subset_cfg is not None and subset_cfg.get("activate", True)
     caliop_cfg = cfg["cal_lid_l1"]
     version = _normalized_version(get_full_version())
     granule_date = cfg["granule"]
     granule_time = parse_granule_time(granule_date)
-    maximum_altitude_km = _resolve_max_altitude_km(
-        processing_cfg["max_altitude_km"]
-    )
+    maximum_altitude_km = _resolve_max_altitude_km(processing_cfg["max_altitude_km"])
 
     return ProcessingRequest(
         granule_date=granule_date,
@@ -123,19 +113,14 @@ def resolve_processing_request(cfg):
             Path(previous_file).parent if previous_file is not None else None
         ),
         next_granule=_granule_id(next_file),
-        next_directory=(
-            Path(next_file).parent if next_file is not None else None
-        ),
+        next_directory=(Path(next_file).parent if next_file is not None else None),
         subset_active=subset_active,
         subset_mode=(
-            subset_cfg.get("mode", "profindex")
-            if subset_active else "profindex"
+            subset_cfg.get("mode", "profindex") if subset_active else "profindex"
         ),
         subset_start=(subset_cfg.get("start") if subset_active else None),
         subset_end=(subset_cfg.get("end") if subset_active else None),
-        save_development_data=processing_cfg.get(
-            "save_development_data", False
-        ),
+        save_development_data=processing_cfg.get("save_development_data", False),
         output_version=version,
         output_product_type=output_cfg.get("product_type", "Dev"),
         output_directory=_output_directory(output_cfg, granule_time, version),

@@ -91,9 +91,7 @@ def prepare_granule(request, granule):
             altitude.values,
             granule.prof_min,
         )
-        granule_development_data = xr.Dataset(
-            coords=granule_detection_product.coords
-        )
+        granule_development_data = xr.Dataset(coords=granule_detection_product.coords)
 
     return GranulePreparation(
         profile_starts=profile_starts,

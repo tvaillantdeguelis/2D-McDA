@@ -12,14 +12,14 @@ class HDF4Reader:
     """
     Read HDF4 file using the "with" paradigm.
     """
-    
+
     def __init__(self, file_path):
         self.file_path = file_path
         self._sd_interface = None
         self._hdf_interface = None
         self._vs_interface = None
         self._metadata = None
-    
+
     # __enter__ method for the "with" statement
     def __enter__(self):
         if self._sd_interface is not None:
@@ -136,7 +136,7 @@ class HDF4Reader:
                 name = fallback
             dimensions.append(name)
         return tuple(dimensions)
-    
+
     def get_fillvalue(self, key):
         dataset = self._sd_interface.select(key)
         try:
@@ -150,7 +150,8 @@ class HDF4Reader:
         finally:
             dataset.endaccess()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
 
     filename_vfm = "/home/vaillant/DATA_CALIOP/VFM.v4.20/2010/2010_06_01/CAL_LID_L2_VFM-Standard-V4-20.2010-06-01T01-33-28ZN.hdf"
     filepath_l1 = "/home/vaillant/DATA_CALIOP/CAL_LID_L1.v4.10/2010/2010_03_21/CAL_LID_L1-Standard-V4-10.2010-03-21T02-17-14ZN.hdf"
@@ -158,6 +159,6 @@ if __name__ == '__main__':
 
     with HDF4Reader(filepath_l1) as data_reader:
         sds_keys = data_reader.get_sds_keys()
-    
+
     for sds_key in sds_keys:
         print(sds_key, sds_keys[sds_key])

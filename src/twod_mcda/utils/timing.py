@@ -9,7 +9,6 @@ from contextlib import contextmanager
 from time import perf_counter
 import threading
 
-
 # Thread-local state so concurrent threads have independent depths
 _timer_state = threading.local()
 
