@@ -226,23 +226,22 @@ def find_neighbor_granules(cfg):
 
             files.extend(folder.glob("CAL_LID_L1-*.hdf"))
 
-    # Sort granules chronologically
-    files = sorted(
-        files,
-        key=extract_granule_time,
-    )
-
     previous_file = None
+    previous_time = None
     next_file = None
+    next_time = None
 
     for file in files:
 
         file_time = extract_granule_time(file)
 
         if file_time < current_time:
-            previous_file = file
+            if previous_time is None or file_time > previous_time:
+                previous_file = file
+                previous_time = file_time
         elif file_time > current_time:
-            next_file = file
-            break
+            if next_time is None or file_time < next_time:
+                next_file = file
+                next_time = file_time
 
     return previous_file, next_file
