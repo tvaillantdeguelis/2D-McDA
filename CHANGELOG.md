@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Simplified neighbor granule search.
+
 ## [2.5.2] - 2026-09-04
 
 ### Changed
