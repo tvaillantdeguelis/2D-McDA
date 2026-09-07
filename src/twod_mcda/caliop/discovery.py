@@ -12,7 +12,7 @@ from twod_mcda.caliop.constants import (
 
 GRANULE_PATTERN = re.compile(
     r"CAL_LID_L1-[^-]+-V(?:\d+)-(?:\d+)\."
-    r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})Z[DN]\.hdf"
+    r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})(Z[DN])\.hdf"
 )
 
 
@@ -59,6 +59,24 @@ def extract_granule_time(filename):
         match.group(1),
         CALIPSO_STRFTIME_FMT,
     )
+
+
+def extract_granule_id(filename):
+    """
+    Extract the full granule identifier, including the day/night flag,
+    from a CALIOP L1 filename.
+
+    Example:
+        CAL_LID_L1-Standard-V5-00.2013-01-11T03-25-54ZD.hdf
+        -> "2013-01-11T03-25-54ZD"
+    """
+
+    match = GRANULE_PATTERN.match(filename.name)
+
+    if match is None:
+        raise ValueError(f"Invalid CALIOP filename format: {filename.name}")
+
+    return match.group(1) + match.group(2)
 
 
 def get_caliop_folder(cfg, date):
@@ -178,10 +196,7 @@ def find_granules_between_dates(cfg, start_date, end_date):
         file for file in files if start_date <= extract_granule_time(file) <= end_date
     ]
 
-    return [
-        extract_granule_time(file).strftime("%Y-%m-%dT%H-%M-%SZN")
-        for file in granule_files
-    ]
+    return [extract_granule_id(file) for file in granule_files]
 
 
 def find_neighbor_granules(cfg):
