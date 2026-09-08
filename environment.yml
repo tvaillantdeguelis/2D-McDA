@@ -17,6 +17,7 @@ dependencies:
   - bokeh
   - cartopy
   - jupyterlab
+  - notebook
   - jupyter_bokeh
   - ipykernel
   - pyhdf
