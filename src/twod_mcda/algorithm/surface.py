@@ -10,7 +10,7 @@ from twod_mcda.caliop.physics import (
 )
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
 from twod_mcda.caliop.xarray_utils import as_masked_array
-from twod_mcda.algorithm.parameters import SurfaceDetectionParameters
+from twod_mcda.parameters import SurfaceDetectionParameters
 from twod_mcda.utils.timing import timer
 
 FILL_VALUE_INT = 999

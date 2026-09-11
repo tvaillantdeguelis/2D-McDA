@@ -4,7 +4,14 @@ import numpy as np
 from numba import jit
 from scipy.ndimage import convolve1d
 
-from twod_mcda.algorithm.flags import (
+from twod_mcda.caliop.constants import (
+    FILL_VALUE_FLOAT,
+    N_30M_BINS_PER_BIN_R1,
+    N_30M_BINS_PER_BIN_R2,
+    N_BINS_R1,
+    N_BINS_R2,
+)
+from twod_mcda.parameters import (
     FLAG_AFA,
     FLAG_FA,
     FLAG_LIKELY_ARTIFACT,
@@ -12,13 +19,6 @@ from twod_mcda.algorithm.flags import (
     FLAG_NOTHING,
     FLAG_SMALL_STRIPS,
     FLAG_SURFACE,
-)
-from twod_mcda.caliop.constants import (
-    FILL_VALUE_FLOAT,
-    N_30M_BINS_PER_BIN_R1,
-    N_30M_BINS_PER_BIN_R2,
-    N_BINS_R1,
-    N_BINS_R2,
 )
 
 

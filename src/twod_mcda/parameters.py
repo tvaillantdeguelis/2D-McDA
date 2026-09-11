@@ -1,5 +1,25 @@
-"""Scientific parameters for surface and feature detection."""
+"""Tunable parameters for the detection algorithm and pipeline execution."""
 
+
+# --- Pixel flags used in channel-specific detection masks ---
+
+FLAG_NOTHING = 0
+FLAG_DETECTION_LEVEL = 1
+FLAG_MAYBE = 255
+FLAG_SURFACE = 254
+FLAG_LIKELY_ARTIFACT = 253
+FLAG_FA = 252
+FLAG_AFA = 251
+FLAG_SMALL_STRIPS = 250
+
+
+# --- Slicing / execution ---
+
+NB_PROF_SLICE = 3000
+NB_PROF_CONTEXT = 250
+
+
+# --- Surface detection ---
 
 class SurfaceDetectionParameters:
     """Surface-detection parameters for one lidar channel."""
@@ -18,6 +38,8 @@ class SurfaceDetectionParameters:
         else:
             raise ValueError(f"Unrecognized channel: {channel}")
 
+
+# --- Feature detection ---
 
 class FeatureDetectionParameters:
     """Feature-detection parameters for one lidar channel."""

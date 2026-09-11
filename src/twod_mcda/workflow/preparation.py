@@ -8,12 +8,12 @@ whole-granule output datasets.
 
 import xarray as xr
 
+from twod_mcda.parameters import NB_PROF_CONTEXT, NB_PROF_SLICE
 from twod_mcda.utils.timing import timer
 from twod_mcda.workflow.models import GranulePreparation
 from twod_mcda.workflow.neighbors import read_adjacent_profiles
 from twod_mcda.workflow.output_assembly import empty_output
 from twod_mcda.workflow.reporting import print_processing_summary
-from twod_mcda.workflow.settings import NB_PROF_CONTEXT, NB_PROF_SLICE
 from twod_mcda.workflow.slicing import plan_slices
 
 

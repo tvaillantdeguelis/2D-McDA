@@ -18,12 +18,12 @@ from twod_mcda.algorithm.filtering import (
     replace_maybe,
     reput_low_confidence_flags,
 )
-from twod_mcda.algorithm.parameters import (
+from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
+from twod_mcda.caliop.xarray_utils import as_masked_array
+from twod_mcda.parameters import (
     FeatureDetectionParameters,
     get_feature_detection_coef,
 )
-from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
-from twod_mcda.caliop.xarray_utils import as_masked_array
 from twod_mcda.utils.timing import timer
 
 
