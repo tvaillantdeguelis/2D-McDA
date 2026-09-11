@@ -24,7 +24,7 @@ def print_processing_summary(
 
     print("\n################# Configuration #################")
     print(f"2D-McDA version        : {request.output_version}")
-    print(f"CALIOP L1 version      : {request.caliop_version}")
+    print(f"CALIOP L1 version      : v{request.caliop_version}")
     print(f"Save development data  : {request.save_development_data}")
     print(f"Maximum altitude       : {request.maximum_altitude_km} km")
     if request.subset_active:

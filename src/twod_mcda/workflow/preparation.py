@@ -22,22 +22,22 @@ def _load_context_profiles(request, previous_context_count, next_context_count):
 
     previous_profiles = None
     previous_granule_path = None
-    if previous_context_count and request.previous_granule is not None:
+    if previous_context_count and request.previous_granule_date is not None:
         previous_profiles, previous_granule_path = read_adjacent_profiles(
             request,
-            request.previous_granule,
-            request.previous_directory,
+            request.previous_granule_date,
+            request.previous_granule_directory,
             -previous_context_count,
             None,
         )
 
     next_profiles = None
     next_granule_path = None
-    if next_context_count and request.next_granule is not None:
+    if next_context_count and request.next_granule_date is not None:
         next_profiles, next_granule_path = read_adjacent_profiles(
             request,
-            request.next_granule,
-            request.next_directory,
+            request.next_granule_date,
+            request.next_granule_directory,
             None,
             next_context_count - 1,
         )

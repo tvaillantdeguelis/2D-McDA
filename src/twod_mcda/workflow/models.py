@@ -15,11 +15,11 @@ class ProcessingRequest:
 
     granule_date: str
     caliop_version: str
-    current_directory: Path
-    previous_granule: str | None
-    previous_directory: Path | None
-    next_granule: str | None
-    next_directory: Path | None
+    current_granule_directory: Path
+    previous_granule_date: str | None
+    previous_granule_directory: Path | None
+    next_granule_date: str | None
+    next_granule_directory: Path | None
     subset_active: bool
     subset_mode: str
     subset_start: int | float | None

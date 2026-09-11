@@ -37,7 +37,7 @@ def run_granule_pipeline(cfg):
         current_granule_reader = open_granule(
             processing_request,
             processing_request.granule_date,
-            processing_request.current_directory,
+            processing_request.current_granule_directory,
             processing_request.subset_start,
             processing_request.subset_end,
             processing_request.subset_mode,
