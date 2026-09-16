@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from twod_mcda.algorithm.flags import FLAG_FA, FLAG_NOTHING, FLAG_SURFACE
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
+from twod_mcda.parameters import FLAG_FA, FLAG_NOTHING, FLAG_SURFACE
 
 
 def transmission_correction(sr, sr_init, b_mol, feature, temperature, params):

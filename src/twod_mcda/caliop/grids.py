@@ -23,7 +23,6 @@ from twod_mcda.caliop.constants import (
     N_BINS_R3,
     N_BINS_R4,
     N_BINS_R5,
-    N_LASER_PULSES_PER_1km,
     N_LASER_PULSES_PER_5km,
     N_PROFILES_VFM_R2,
     N_PROFILES_VFM_R3,
@@ -265,100 +264,3 @@ def get_single_shot_index_from_5km_index(i_5km):
     ss_max = (i_5km + 1) * N_LASER_PULSES_PER_5km - 1
 
     return ss_min, ss_max
-
-
-def split_granule_date(granule_date):
-
-    granule_date_dict = {}
-    granule_date_dict["year"] = int(granule_date[:4])
-    granule_date_dict["month"] = int(granule_date[5:7])
-    granule_date_dict["day"] = int(granule_date[8:10])
-    granule_date_dict["hour"] = int(granule_date[11:13])
-    granule_date_dict["min"] = int(granule_date[14:16])
-    granule_date_dict["sec"] = int(granule_date[17:19])
-    daynight_flag = granule_date[19:21]
-    if daynight_flag == "ZD":
-        granule_date_dict["daynigth"] = "day"
-    elif daynight_flag == "ZN":
-        granule_date_dict["daynigth"] = "night"
-
-    return granule_date_dict
-
-
-def from_30mx333m_to_new_resolution(data, vgrid, hgrid, prof_min, print_first_ID=False):
-    """
-    Average CALIOP data to a new resolution.
-    Attention: the data resolution change but the grid stays 30mx333m.
-    """
-
-    # Look for first profile of a 5 km chunk
-    if prof_min:
-        profID_first_in_chunk = get_first_profileID_of_chunk(prof_min)
-    else:
-        profID_first_in_chunk = 0
-    if print_first_ID:
-        print("First profile of first 5 km chunk: %d" % profID_first_in_chunk)
-
-    if vgrid == "30m":
-        pass  # already in 30 m resolution
-    elif vgrid == "60m":
-        # Average 30 m to 60 m
-        data_copy = np.ma.copy(data)
-        for i in range(0, data.shape[1], 2):
-            for j in range(i, i + 2):
-                data[:, j] = np.ma.mean(data_copy[:, i : i + 2], axis=1)
-    elif vgrid == "180m":
-        # Average 30 m to 180 m
-        data_copy = np.ma.copy(data)
-        # for i in np.arange(data_copy.shape[1]):
-        #     print(f"{i:3d} {data_copy[20, i]:15.10f}")
-        # stop
-        for i in range(0, data.shape[1], 6)[:-1]:
-            for j in range(i, i + 6):
-                data[:, j] = np.ma.mean(data_copy[:, i : i + 6], axis=1)
-    else:
-        raise Exception("Error: vgrid unknown")
-
-    if hgrid == "333m":
-        pass  # already at 333 m resolution
-    elif hgrid == "1km":
-        data_copy = np.ma.copy(data)  # data already averaged vertically
-        for i in range(
-            profID_first_in_chunk,
-            data.shape[0] - N_LASER_PULSES_PER_1km + 1,
-            N_LASER_PULSES_PER_1km,
-        ):
-            for j in range(i, i + N_LASER_PULSES_PER_1km):
-                data[j, :] = np.ma.mean(
-                    data_copy[i : i + N_LASER_PULSES_PER_1km, :], axis=0
-                )
-    elif hgrid == "5km":
-        data_copy = np.ma.copy(data)  # data already averaged vertically
-        for i in range(
-            profID_first_in_chunk,
-            data.shape[0] - N_LASER_PULSES_PER_5km + 1,
-            N_LASER_PULSES_PER_5km,
-        ):
-            for j in range(i, i + N_LASER_PULSES_PER_5km):
-                data[j, :] = np.ma.mean(
-                    data_copy[i : i + N_LASER_PULSES_PER_5km, :], axis=0
-                )
-    else:
-        raise Exception("Error: hgrid unknown")
-
-    return data
-
-
-def get_first_profileID_of_chunk(profID):
-    """
-    Look for first profile of a 5 km chunk
-    :param profID: profile ID in a chunk
-    :return: first profile ID of the chunk
-    """
-
-    modulo_prof = profID % N_LASER_PULSES_PER_5km
-    profID_first_in_chunk = 15 - modulo_prof
-    if profID_first_in_chunk == 15:
-        profID_first_in_chunk = 0
-
-    return profID_first_in_chunk

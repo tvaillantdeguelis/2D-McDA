@@ -1,0 +1,69 @@
+"""Open CALIOP granules and read their variables into labelled xarray datasets."""
+
+import xarray as xr
+
+from twod_mcda.reading.reader import CALIOPRegularGridReader
+from twod_mcda.caliop.constants import CALIOP_L1_PRODUCT_TYPE
+from twod_mcda.reading.variables import CALIOP_L1_PROCESSING_VARIABLES
+
+
+def open_granule(
+    request,
+    granule,
+    directory,
+    profile_start=None,
+    profile_end=None,
+    subset_mode="profindex",
+):
+    """Open one CALIOP granule without loading its scientific arrays."""
+
+    return CALIOPRegularGridReader(
+        product="L1",
+        version=request.caliop_version,
+        data_type=CALIOP_L1_PRODUCT_TYPE,
+        granule=granule,
+        slice_start=profile_start,
+        slice_end=profile_end,
+        slice_start_end_type=subset_mode,
+        folderpath=str(directory),
+        max_altitude_index=request.maximum_altitude_index,
+    )
+
+
+def read_slice(granule_reader, profile_start, profile_end):
+    """Read and derive the detector inputs for one profile slice."""
+
+    reader = granule_reader.select_profiles(profile_start, profile_end)
+    arrays = {
+        variable: reader.get_data(variable)
+        for variable in CALIOP_L1_PROCESSING_VARIABLES
+    }
+    altitude = arrays["Lidar_Data_Altitudes"]
+    altitude_values = altitude.values
+    arrays["Lidar_Data_Altitudes"] = altitude.assign_coords(altitude=altitude_values)
+    for name, array in arrays.items():
+        if "altitude" in array.dims:
+            arrays[name] = array.assign_coords(altitude=altitude_values)
+
+    dataset = xr.Dataset(arrays)
+    return dataset.set_coords(["Latitude", "Longitude", "Lidar_Data_Altitudes"])
+
+
+def read_adjacent_profiles(request, granule, directory, profile_start, profile_end):
+    """Load context profiles from one adjacent granule, then close its file."""
+
+    with open_granule(
+        request,
+        granule,
+        directory,
+        profile_start,
+        profile_end,
+    ) as adjacent_granule_reader:
+        adjacent_profiles = read_slice(
+            adjacent_granule_reader,
+            adjacent_granule_reader.prof_min,
+            adjacent_granule_reader.prof_max,
+        )
+        adjacent_granule_path = adjacent_granule_reader.filepath
+
+    return adjacent_profiles, adjacent_granule_path

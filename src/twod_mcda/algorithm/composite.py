@@ -7,7 +7,7 @@ from datetime import datetime
 import numpy as np
 import xarray as xr
 
-from twod_mcda.caliop.xarray_utils import as_masked_array
+from twod_mcda.utils.arrays import as_masked_array
 
 # Global variables
 flag_nothing = 0

@@ -3,7 +3,26 @@
 import numpy as np
 from scipy.interpolate import interp1d
 
-from twod_mcda.caliop.constants import FILL_VALUE_FLOAT, LIDAR_DATA_ALTITUDES
+from twod_mcda.caliop.constants import (
+    FILL_VALUE_FLOAT,
+    LAYER_ALTITUDE_R1_INDEX_RANGE,
+    LAYER_ALTITUDE_R2_INDEX_RANGE,
+    LAYER_ALTITUDE_R3_INDEX_RANGE,
+    LAYER_ALTITUDE_R4_INDEX_RANGE,
+    LAYER_ALTITUDE_R5_INDEX_RANGE,
+    LIDAR_DATA_ALTITUDES,
+    NUMBER_OF_VERTICAL_BINS,
+    N_15M_BINS_PER_BIN_R1,
+    N_15M_BINS_PER_BIN_R2,
+    N_15M_BINS_PER_BIN_R3,
+    N_15M_BINS_PER_BIN_R4,
+    N_15M_BINS_PER_BIN_R5,
+    N_333M_BINS_PER_BIN_R1,
+    N_333M_BINS_PER_BIN_R2,
+    N_333M_BINS_PER_BIN_R3,
+    N_333M_BINS_PER_BIN_R4,
+    N_333M_BINS_PER_BIN_R5,
+)
 
 
 def compute_par_ab532(tot_ab532, per_ab532):
@@ -298,3 +317,150 @@ def compute_shotnoise(fcorr, nb_bins_shift_abs, nb_pixels, nsf, mol_ab):
 def compute_backgroundnoise(fcorr, nb_bins_shift_abs, nb_pixels, rms, mol_ab):
     correction = _correction_values(fcorr, nb_bins_shift_abs)
     return correction * 1 / np.sqrt(nb_pixels) * 1 / mol_ab * rms
+
+
+def get_caliop_correction_function(wl):
+    """Input: wl = wavelength of the lidar channel
+    Output: fcorr = correction function at each altitude level from
+                    Table 2 of Liu (2011), updated values sent by M.
+                    Vaughan"""
+
+    fcorr = np.ones((NUMBER_OF_VERTICAL_BINS, 11))  # fcorr[bin index range, Nshift]
+    fcorr[LAYER_ALTITUDE_R5_INDEX_RANGE[0] : LAYER_ALTITUDE_R5_INDEX_RANGE[1] + 1] = [
+        1.596,
+        1.448,
+        1.322,
+        1.224,
+        1.161,
+        1.140,
+        1.161,
+        1.224,
+        1.322,
+        1.448,
+        1.596,
+    ]
+    fcorr[LAYER_ALTITUDE_R4_INDEX_RANGE[0] : LAYER_ALTITUDE_R4_INDEX_RANGE[1] + 1] = [
+        1.573,
+        1.345,
+        1.188,
+        1.131,
+        1.188,
+        1.345,
+        1.573,
+        1.345,
+        1.188,
+        1.130,
+        1.188,
+    ]
+    fcorr[LAYER_ALTITUDE_R3_INDEX_RANGE[0] : LAYER_ALTITUDE_R3_INDEX_RANGE[1] + 1] = [
+        1.451,
+        1.080,
+        1.451,
+        1.080,
+        1.451,
+        1.080,
+        1.451,
+        1.080,
+        1.451,
+        1.080,
+        1.451,
+    ]
+    if wl == 532:
+        fcorr[
+            LAYER_ALTITUDE_R2_INDEX_RANGE[0] : LAYER_ALTITUDE_R2_INDEX_RANGE[1] + 1
+        ] = [
+            1.269,
+            1.269,
+            1.269,
+            1.269,
+            1.269,
+            1.269,
+            1.269,
+            1.269,
+            1.269,
+            1.269,
+            1.269,
+        ]
+    elif wl == 1064:
+        fcorr[
+            LAYER_ALTITUDE_R2_INDEX_RANGE[0] : LAYER_ALTITUDE_R2_INDEX_RANGE[1] + 1
+        ] = [
+            1.451,
+            1.451,
+            1.451,
+            1.451,
+            1.451,
+            1.451,
+            1.451,
+            1.451,
+            1.451,
+            1.451,
+            1.451,
+        ]
+    else:
+        raise ValueError(f"Unrecognized wavelength: {wl}; use 532 or 1064 instead")
+    fcorr[LAYER_ALTITUDE_R1_INDEX_RANGE[0] : LAYER_ALTITUDE_R1_INDEX_RANGE[1] + 1] = [
+        1.596,
+        1.448,
+        1.322,
+        1.224,
+        1.161,
+        1.140,
+        1.161,
+        1.224,
+        1.322,
+        1.448,
+        1.596,
+    ]
+
+    return fcorr
+
+
+def get_nb_pixels(wl):
+    """Input: wl = wavelength of the lidar channel
+    Output: nb_pixels = number of original resolution lidar "pixels"
+                        (bins) averaged together at each altitude
+                        level at the wavelength channel wl"""
+
+    nb_pixels = np.ones(583) * -9999.0
+
+    if wl == 532:
+        nb_pixels[
+            LAYER_ALTITUDE_R5_INDEX_RANGE[0] : LAYER_ALTITUDE_R5_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R5 * N_15M_BINS_PER_BIN_R5)
+        nb_pixels[
+            LAYER_ALTITUDE_R4_INDEX_RANGE[0] : LAYER_ALTITUDE_R4_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R4 * N_15M_BINS_PER_BIN_R4)
+        nb_pixels[
+            LAYER_ALTITUDE_R3_INDEX_RANGE[0] : LAYER_ALTITUDE_R3_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R3 * N_15M_BINS_PER_BIN_R3)
+        nb_pixels[
+            LAYER_ALTITUDE_R2_INDEX_RANGE[0] : LAYER_ALTITUDE_R2_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R2 * N_15M_BINS_PER_BIN_R2)
+        nb_pixels[
+            LAYER_ALTITUDE_R1_INDEX_RANGE[0] : LAYER_ALTITUDE_R1_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R1 * N_15M_BINS_PER_BIN_R1)
+
+    elif wl == 1064:
+        nb_pixels[
+            LAYER_ALTITUDE_R5_INDEX_RANGE[0] : LAYER_ALTITUDE_R5_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R5 * N_15M_BINS_PER_BIN_R5)
+        nb_pixels[
+            LAYER_ALTITUDE_R4_INDEX_RANGE[0] : LAYER_ALTITUDE_R4_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R4 * N_15M_BINS_PER_BIN_R4)
+        nb_pixels[
+            LAYER_ALTITUDE_R3_INDEX_RANGE[0] : LAYER_ALTITUDE_R3_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R3 * N_15M_BINS_PER_BIN_R3)
+        nb_pixels[
+            LAYER_ALTITUDE_R2_INDEX_RANGE[0] : LAYER_ALTITUDE_R2_INDEX_RANGE[1] + 1
+        ] = (
+            N_333M_BINS_PER_BIN_R2 * N_15M_BINS_PER_BIN_R2 * 2
+        )  # average at 60 m instead of 30 m in original data
+        nb_pixels[
+            LAYER_ALTITUDE_R1_INDEX_RANGE[0] : LAYER_ALTITUDE_R1_INDEX_RANGE[1] + 1
+        ] = (N_333M_BINS_PER_BIN_R1 * N_15M_BINS_PER_BIN_R1)
+
+    else:
+        raise ValueError(f"Unrecognized wavelength: {wl}; use 532 or 1064 instead")
+
+    return nb_pixels

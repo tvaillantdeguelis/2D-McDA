@@ -20,8 +20,12 @@ dependencies:
   - notebook
   - jupyter_bokeh
   - ipykernel
-  - pyhdf
+  # CALIOP products are HDF4 files, read through the netCDF4 engine. This
+  # requires a libnetcdf built with HDF4 support, which is the case on
+  # conda-forge but not in the netCDF4 wheels published on PyPI: installing
+  # this environment with pip instead of conda would break reading.
   - netcdf4
+  - libnetcdf
   - pyyaml
   - pip
   - pip:

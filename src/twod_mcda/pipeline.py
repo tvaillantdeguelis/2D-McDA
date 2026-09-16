@@ -1,7 +1,7 @@
 """Top-level processing pipeline.
 
 ``run_granule_pipeline`` is the entry point. It locates and opens one CALIOP
-granule, prepares it for processing (see ``workflow.preparation``), then
+granule, prepares it for processing (see ``preparation``), then
 applies the 2D-McDA scientific algorithm slice by slice.
 
 The result is written to a netCDF product at the end.
@@ -13,14 +13,13 @@ import time
 from .algorithm.composite import merged_feature_masks
 from .algorithm.features import detect_features_in_3_channels
 from .algorithm.surface import detect_surface_in_3_channels
-from .caliop.input import open_granule
+from .config import resolve_processing_request
+from .output.assembly import assemble_results, store_development, store_slice
 from .output.product import write_product
+from .preparation import prepare_granule
+from .reading.access import open_granule
+from .slicing import describe_slice, load_slice, trim_slice_context
 from .utils.timing import timer
-from .workflow.output_assembly import assemble_results, store_development, store_slice
-from .workflow.preparation import prepare_granule
-from .workflow.request import resolve_processing_request
-from .workflow.slice_loading import describe_slice, load_slice
-from .workflow.slicing import trim_slice_context
 
 
 def run_granule_pipeline(cfg):
@@ -36,16 +35,16 @@ def run_granule_pipeline(cfg):
     with timer("Open current CALIOP granule"):
         current_granule_reader = open_granule(
             processing_request,
-            processing_request.granule_date,
-            processing_request.current_directory,
+            processing_request.granule,
+            processing_request.current_granule_directory,
             processing_request.subset_start,
             processing_request.subset_end,
             processing_request.subset_mode,
         )
 
     # This ``with`` guarantees that the HDF file closes, even after an error.
-    with current_granule_reader as current_granule:
-        preparation = prepare_granule(processing_request, current_granule)
+    with current_granule_reader as current_granule_reader:
+        preparation = prepare_granule(processing_request, current_granule_reader)
 
         planned_slices = zip(
             preparation.profile_starts,
@@ -79,7 +78,7 @@ def run_granule_pipeline(cfg):
                     slice_data = load_slice(
                         first_profile_to_load,
                         last_profile_to_load,
-                        current_granule,
+                        current_granule_reader,
                         preparation.previous_profiles,
                         preparation.next_profiles,
                     )
@@ -116,7 +115,7 @@ def run_granule_pipeline(cfg):
                             profile_min,
                             profile_max,
                             first_profile_to_load,
-                            current_granule.prof_min,
+                            current_granule_reader.prof_min,
                             preparation.profile_count,
                         )
                     store_slice(
@@ -125,7 +124,7 @@ def run_granule_pipeline(cfg):
                         profile_min,
                         profile_max,
                         first_profile_to_load,
-                        current_granule.prof_min,
+                        current_granule_reader.prof_min,
                     )
 
         with timer("Assemble arrays and metadata for the NetCDF product"):
@@ -133,7 +132,7 @@ def run_granule_pipeline(cfg):
                 preparation.granule_detection_product,
                 preparation.granule_development_data,
                 preparation.altitude,
-                current_granule,
+                current_granule_reader,
             )
 
     print(

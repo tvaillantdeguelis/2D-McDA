@@ -4,321 +4,205 @@ import numpy as np
 import xarray as xr
 
 from twod_mcda.algorithm.attenuation import transmission_correction
-from twod_mcda.algorithm.filtering import (
+from twod_mcda.algorithm.flagging import (
     FLAG_WEAK_SIGNAL,
     apply_surface_detection,
     apply_threshold,
-    apply_window,
-    average_below_8_2,
     fill_fully_attenuated,
     fill_likely_artifact,
-    fill_small_strips,
-    gaussian_2d_window,
-    remove_detect_from_sr,
-    replace_maybe,
     reput_low_confidence_flags,
 )
-from twod_mcda.algorithm.parameters import (
+from twod_mcda.algorithm.morphology import (
+    apply_window,
+    fill_small_strips,
+    replace_maybe,
+)
+from twod_mcda.algorithm.smoothing import (
+    average_below_8_2,
+    gaussian_2d_window,
+    remove_detect_from_sr,
+)
+from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
+from twod_mcda.parameters import (
     FeatureDetectionParameters,
     get_feature_detection_coef,
 )
-from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
-from twod_mcda.caliop.xarray_utils import as_masked_array
+from twod_mcda.utils.arrays import as_masked_array
 from twod_mcda.utils.timing import timer
 
 
+class _DetectionHistory:
+    """The current mask and signal, together with every intermediate state.
+
+    ``detect_features`` replaces ``feature`` and ``sr`` step after step. Each
+    assignment is recorded under its own step number, so ``to_arrays`` can stack
+    the whole run into the two 3-D arrays of the development product. Assigning
+    is therefore not free: every ``history.feature = ...`` consumes a step.
+    """
+
+    def __init__(self, sr, feature):
+        self._sr = sr
+        self._feature = feature
+        self._signals = {0: sr}
+        self._features = {0: feature}
+        self._step = 0
+
+    @property
+    def feature(self):
+        return self._feature
+
+    @feature.setter
+    def feature(self, values):
+        self._step += 1
+        self._feature = values
+        self._features[self._step] = values
+
+    @property
+    def sr(self):
+        return self._sr
+
+    @sr.setter
+    def sr(self, values):
+        self._step += 1
+        self._sr = values
+        self._signals[self._step] = values
+
+    def to_arrays(self, shape):
+        """Stack every recorded state, leaving untouched steps at their default."""
+
+        features = np.ma.zeros((self._step + 1, *shape), dtype=np.uint8)
+        signals = np.ma.ones((self._step + 1, *shape)) * FILL_VALUE_FLOAT
+        for step, values in self._features.items():
+            features[step, :, :] = values
+        for step, values in self._signals.items():
+            signals[step, :, :] = values
+        return features, signals
+
+
+def _apply_detection_level(history, level, channel, sr_sigma, params):
+    """Run one detection level on the current mask.
+
+    The coefficients decide which steps apply, so the five levels differ only by
+    their parameters: a level whose gaussian window ``a`` is undefined does not
+    smooth the signal beforehand, one whose window ``s`` is undefined does not
+    window the candidate pixels, and one whose threshold ``k`` is undefined does
+    not apply to this channel at all.
+
+    Returns the noise threshold, which gaussian averaging lowers.
+    """
+
+    k, n, s, a = get_feature_detection_coef(channel, level - 1)
+
+    if k is None:
+        # Level 1 only applies to the two 532 nm channels.
+        return sr_sigma
+
+    if a is not None:
+        with timer("Apply a gaussian horizontal line window averaging"):
+            history.sr, sr_sigma = gaussian_2d_window(
+                a[0], a[1], history.sr, history.feature, sr_sigma
+            )
+
+    with timer(
+        "Apply threshold to get very high echo (likely PMT artifact)"
+        if level == 1
+        else "Apply threshold"
+    ):
+        history.feature = apply_threshold(k, history.feature, history.sr, sr_sigma)
+
+    if s is not None:
+        with timer("Windowing on the 'maybe' pixels"):
+            history.feature = apply_window(s[0], s[1], history.feature, level)
+
+    with timer(
+        "Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number limit condition"
+    ):
+        history.feature = replace_maybe(n, history.feature, level)
+
+    if level == 1:
+        with timer("Flag 'Likely Artifact' below those high signal to some extent"):
+            history.feature = fill_likely_artifact(params, history.feature, level)
+
+    return sr_sigma
+
+
 def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
-    """Detect features in ATSR signal of lidar channel"""
+    """Detect features in ATSR signal of lidar channel.
+
+    Five detection levels run in turn, each one lowering its threshold and so
+    picking up weaker features than the previous one. Levels 1 to 4 run back to
+    back; level 5 runs last, after the signal has been averaged and the fully
+    attenuated columns have been flagged.
+    """
 
     # Get feature detection parameters
     params = FeatureDetectionParameters(channel)
 
-    # Initialization
-    feature_dict = {}
-    sr_dict = {}
-    step = 0
-    sr_dict[step] = np.ma.copy(sr)
-    last_sr = step
-    feature_dict[step] = np.ma.zeros(sr.shape, dtype=np.uint8)
+    history = _DetectionHistory(
+        np.ma.copy(sr),
+        np.ma.zeros(sr.shape, dtype=np.uint8),
+    )
     twoway_transmittance_array = np.ma.ones(sr.shape) * FILL_VALUE_FLOAT
-    last_feature = step
-    FLAG_DETECTION_LEVEL = 1  # incremented after each detection level: 1, 2,...
+
     with timer("Put 'Surface' flag on feature mask"):
-        step += 1
-        feature_dict[step] = apply_surface_detection(
-            feature_dict[last_feature], surf_alt_index
-        )
-        last_feature = step
+        history.feature = apply_surface_detection(history.feature, surf_alt_index)
 
     with timer("Remove detected pixel from ATSR"):
-        step += 1
-        sr_dict[step] = remove_detect_from_sr(
-            sr_dict[last_sr], feature_dict[last_feature]
-        )
-        last_sr = step
+        history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    # --------------------------------------------------------------------------
-    with timer("Detection level 1"):
-        # If 532 nm par or 532 nm per channel
-        if (channel == "532_par") | (channel == "532_per"):
-
-            # Get detection coefficients
-            k, n, s, a = get_feature_detection_coef(channel, FLAG_DETECTION_LEVEL - 1)
-
-            with timer("Apply threshold to get very high echo (likely PMT artifact)"):
-                step += 1
-                feature_dict[step] = apply_threshold(
-                    k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma
-                )
-                last_feature = step
-
-            with timer(
-                "Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number limit condition"
-            ):
-                step += 1
-                feature_dict[step] = replace_maybe(
-                    n, feature_dict[last_feature], FLAG_DETECTION_LEVEL
-                )
-                last_feature = step
-
-            with timer("Flag 'Likely Artifact' below those high signal to some extent"):
-                step += 1
-                feature_dict[step] = fill_likely_artifact(
-                    params, feature_dict[last_feature], FLAG_DETECTION_LEVEL
-                )
-                last_feature = step
-    # --------------------------------------------------------------------------
-
-    # --------------------------------------------------------------------------
-    with timer("Detection level 2"):
-
-        # Increase FLAG_DETECTION_LEVEL
-        FLAG_DETECTION_LEVEL += 1
-
-        # Get detection coefficients
-        k, n, s, a = get_feature_detection_coef(channel, FLAG_DETECTION_LEVEL - 1)
-
-        with timer("Apply threshold"):
-            step += 1
-            feature_dict[step] = apply_threshold(
-                k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma
-            )
-            last_feature = step
-
-        with timer(
-            "Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number limit condition"
-        ):
-            step += 1
-            feature_dict[step] = replace_maybe(
-                n, feature_dict[last_feature], FLAG_DETECTION_LEVEL
-            )
-            last_feature = step
-    # --------------------------------------------------------------------------
-
-    # --------------------------------------------------------------------------
-    with timer("Detection level 3"):
-
-        # Increase FLAG_DETECTION_LEVEL
-        FLAG_DETECTION_LEVEL += 1
-
-        # Get detection coefficients
-        k, n, s, a = get_feature_detection_coef(channel, FLAG_DETECTION_LEVEL - 1)
-
-        with timer("Apply threshold"):
-            step += 1
-            feature_dict[step] = apply_threshold(
-                k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma
-            )
-            last_feature = step
-
-        with timer("Windowing on the 'maybe' pixels"):
-            step += 1
-            feature_dict[step] = apply_window(
-                s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL
-            )
-            last_feature = step
-
-        with timer(
-            "Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number limit condition"
-        ):
-            step += 1
-            feature_dict[step] = replace_maybe(
-                n, feature_dict[last_feature], FLAG_DETECTION_LEVEL
-            )
-            last_feature = step
-    # --------------------------------------------------------------------------
-
-    # --------------------------------------------------------------------------
-    with timer("Detection level 4"):
-        # Increase FLAG_DETECTION_LEVEL
-        FLAG_DETECTION_LEVEL += 1
-
-        # Get detection coefficients
-        k, n, s, a = get_feature_detection_coef(channel, FLAG_DETECTION_LEVEL - 1)
-
-        with timer("Apply threshold"):
-            step += 1
-            feature_dict[step] = apply_threshold(
-                k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma
-            )
-            last_feature = step
-
-        with timer("Windowing on the 'maybe' pixels"):
-            step += 1
-            feature_dict[step] = apply_window(
-                s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL
-            )
-            last_feature = step
-
-        with timer(
-            "Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number limit condition"
-        ):
-            step += 1
-            feature_dict[step] = replace_maybe(
-                n, feature_dict[last_feature], FLAG_DETECTION_LEVEL
-            )
-            last_feature = step
-    # --------------------------------------------------------------------------
+    for level in (1, 2, 3, 4):
+        with timer(f"Detection level {level}"):
+            sr_sigma = _apply_detection_level(history, level, channel, sr_sigma, params)
 
     with timer("Flag 'Fully Attenuated' from lowest altitude to first feature"):
-        step += 1
-        feature_dict[step] = fill_fully_attenuated(feature_dict[last_feature])
-        last_feature = step
+        history.feature = fill_fully_attenuated(history.feature)
 
     with timer("Remove detected pixel from ATSR"):
-        step += 1
-        sr_dict[step] = remove_detect_from_sr(
-            sr_dict[last_sr], feature_dict[last_feature]
-        )
-        last_sr = step
+        history.sr = remove_detect_from_sr(history.sr, history.feature)
 
     with timer("Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)"):
-        step += 1
         # Note: sr_sigma needs to be modified below 8.2 km
-        sr_dict[step], sr_sigma = average_below_8_2(sr_dict[last_sr], sr_sigma)
-        last_sr = step
+        history.sr, sr_sigma = average_below_8_2(history.sr, sr_sigma)
 
     with timer("Flag 'almost FA' where lidar signal is very weak"):
-        step += 1
-        feature_dict[step] = FLAG_WEAK_SIGNAL(
-            params, feature_dict[last_feature], sr_dict[last_sr], sr_sigma
+        history.feature = FLAG_WEAK_SIGNAL(
+            params, history.feature, history.sr, sr_sigma
         )
-        last_feature = step
 
     with timer("Remove detected pixel from ATSR"):
-        step += 1
-        sr_dict[step] = remove_detect_from_sr(
-            sr_dict[last_sr], feature_dict[last_feature]
-        )
-        last_sr = step
+        history.sr = remove_detect_from_sr(history.sr, history.feature)
 
     with timer(
-        "Correct sr signal below feature from transmittance using fixed lidar ratio above and below {params.temp_ice_liquid} °C"
+        "Correct sr signal below feature from transmittance using fixed lidar "
+        f"ratio above and below {params.temp_ice_liquid} °C"
     ):
-        step += 1
-        sr_dict[step], twoway_transmittance_array[:, :] = transmission_correction(
-            sr_dict[last_sr], sr, b_mol, feature_dict[last_feature], temperature, params
+        history.sr, twoway_transmittance_array[:, :] = transmission_correction(
+            history.sr, sr, b_mol, history.feature, temperature, params
         )
-        last_sr = step
 
     with timer("Fill small strip between FA where strip < nb_prof_min prof"):
-        step += 1
-        feature_dict[step] = fill_small_strips(params, feature_dict[last_feature])
-        last_feature = step
-        last_feature_before_averaging = step
+        history.feature = fill_small_strips(params, history.feature)
+        feature_before_averaging = history.feature
 
     with timer("Remove detected pixel from ATSR"):
-        step += 1
-        sr_dict[step] = remove_detect_from_sr(
-            sr_dict[last_sr], feature_dict[last_feature]
-        )
-        last_sr = step
+        history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    # --------------------------------------------------------------------------
     with timer("Detection level 5"):
-
-        # Increase FLAG_DETECTION_LEVEL
-        FLAG_DETECTION_LEVEL += 1
-
-        # Get detection coefficients
-        k, n, s, a = get_feature_detection_coef(channel, FLAG_DETECTION_LEVEL - 1)
-
-        with timer("Apply a gaussian horizontal line window averaging"):
-            step += 1
-            sr_dict[step], sr_sigma = gaussian_2d_window(
-                a[0], a[1], sr_dict[last_sr], feature_dict[last_feature], sr_sigma
-            )
-            last_sr = step
-
-        #### Apply threshold to get the 'maybe' pixels ###
-        with timer("Apply threshold"):
-            step += 1
-            feature_dict[step] = apply_threshold(
-                k, feature_dict[last_feature], sr_dict[last_sr], sr_sigma
-            )
-            last_feature = step
-
-        with timer("Windowing on the 'maybe' pixels"):
-            step += 1
-            feature_dict[step] = apply_window(
-                s[0], s[1], feature_dict[last_feature], FLAG_DETECTION_LEVEL
-            )
-            last_feature = step
-
-        with timer(
-            "Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number limit condition"
-        ):
-            step += 1
-            feature_dict[step] = replace_maybe(
-                n, feature_dict[last_feature], FLAG_DETECTION_LEVEL
-            )
-            last_feature = step
-    # --------------------------------------------------------------------------
+        sr_sigma = _apply_detection_level(history, 5, channel, sr_sigma, params)
 
     with timer("Reput all not confident flags where overwritten during averaging"):
-        step += 1
-        feature_dict[step] = reput_low_confidence_flags(
-            feature_dict[last_feature], feature_dict[last_feature_before_averaging]
+        history.feature = reput_low_confidence_flags(
+            history.feature, feature_before_averaging
         )
-        last_feature = step
 
     with timer("Remove detected pixel from ATSR"):
-        step += 1
-        sr_dict[step] = remove_detect_from_sr(
-            sr_dict[last_sr], feature_dict[last_feature]
-        )
-        last_sr = step
+        history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    with timer("Transform feature and sr dictionaries to 3D arrays"):
-        # Initialization
-        feature_array_steps = np.ma.zeros(
-            (step + 1, sr.shape[0], sr.shape[1]), dtype=np.uint8
-        )
-        sr_array_steps = (
-            np.ma.ones((step + 1, sr.shape[0], sr.shape[1])) * FILL_VALUE_FLOAT
-        )
-
-        # Transform dictionaries to arrays
-        for i_step in np.arange(step + 1):
-            # Test if feature_dict has a i_step
-            try:
-                feature_dict[i_step]
-            # If not go directly to next step
-            except:
-                continue
-            feature_array_steps[i_step, :, :] = feature_dict[i_step]
-
-        for i_step in np.arange(step + 1):
-            # Test if sr_dict has a i_step
-            try:
-                sr_dict[i_step]
-            # If not go directly to next step
-            except:
-                continue
-            sr_array_steps[i_step, :, :] = sr_dict[i_step]
+    with timer("Stack every recorded detection step into 3D arrays"):
+        feature_array_steps, sr_array_steps = history.to_arrays(sr.shape)
 
     return (
-        feature_dict[last_feature],
+        history.feature,
         feature_array_steps,
         sr_array_steps,
         twoway_transmittance_array,
