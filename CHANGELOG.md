@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.0] - 2026-09-16
+
+### Changed
+
+- `CALIOPRegularGridReader` now takes an open granule file and two profile indexes: naming the file and resolving a subset moved to `reading.access`.
+- Renamed `slice_start_end_type` to `subset_mode`, and `CALIPSOReader` to `CALIOPGranuleFile`.
+
+### Removed
+
+- Removed `select_profiles`, whose shallow copy shared the open file, and the derived-variable `elif` chain, replaced by a lookup table.
+- Moved the VFM unfolding to `visualization/vfm.py`, the only place that reads the CALIOP L2 VFM.
+
 ## [2.6.0] - 2026-09-16
 
 ### Changed
@@ -20,13 +32,13 @@
 
 ## [2.5.4] - 2026-09-08
 
-### Fix
+### Fixed
 
 - Add notebook to environment.yml.
 
 ## [2.5.3] - 2026-09-07
 
-### Fix
+### Fixed
 
 - Preserve ZD/ZN when listing granules.
 
@@ -42,7 +54,7 @@
 
 ## [2.5.1] - 2026-09-03
 
-### Fix
+### Fixed
 
 - Fixed bug.
 
@@ -234,6 +246,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.7.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.5.4...v2.6.0
 [2.5.4]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.5.3...v2.5.4
 [2.5.3]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.5.2...v2.5.3

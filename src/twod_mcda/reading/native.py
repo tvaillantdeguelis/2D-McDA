@@ -1,6 +1,6 @@
 """Read CALIOP products on their native grid, straight from the granule file.
 
-``CALIPSOReader`` is the lowest layer of the reading stack: it keeps one file
+``CALIOPGranuleFile`` is the lowest layer of the reading stack: it keeps one file
 open, caches the profile slice being processed, resolves fill values and gives
 every array its 2D-McDA dimension names. It knows nothing about the regular
 30 m grid or about derived variables; that is ``reader.CALIOPRegularGridReader``.
@@ -11,6 +11,8 @@ readable as an ordinary netCDF variable, with its own dimension names and
 attributes. Only SDSs are reachable this way, not the HDF4 Vdata tables. The
 two vertical grids live in both, with identical values, so nothing is lost.
 """
+
+from pathlib import Path
 
 import numpy as np
 import xarray as xr
@@ -33,11 +35,11 @@ DIMENSION_NAMES = {
 VERTICAL_GRID_VARIABLES = ("Lidar_Data_Altitudes", "Met_Data_Altitudes")
 
 
-class CALIPSOReader:
+class CALIOPGranuleFile:
     """Lazy reader that keeps one CALIOP file open and caches one profile slice."""
 
     def __init__(self, filepath):
-        self.filepath = filepath
+        self.filepath = Path(filepath)
         self._dataset = xr.open_dataset(
             filepath,
             engine="netcdf4",

@@ -31,8 +31,8 @@ class DerivedVariables:
     new instance is needed whenever ``prof_min`` or ``prof_max`` changes.
     """
 
-    def __init__(self, data_reader, prof_min, prof_max):
-        self.data_reader = data_reader
+    def __init__(self, granule_file, prof_min, prof_max):
+        self.granule_file = granule_file
         self.prof_min = prof_min
         self.prof_max = prof_max
         self._molecular_profiles = {
@@ -43,7 +43,7 @@ class DerivedVariables:
         }
 
     def _native_values(self, key, do_fillvalue):
-        data = self.data_reader.get_data(
+        data = self.granule_file.get_data(
             key,
             self.prof_min,
             self.prof_max,

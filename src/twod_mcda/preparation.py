@@ -82,7 +82,7 @@ def prepare_granule(request, granule_reader):
         )
         profile_count = granule_reader.prof_max - granule_reader.prof_min + 1
         slice_count = profile_starts.size
-        last_profile_in_file = granule_reader.data_reader.nb_profiles - 1
+        last_profile_in_file = granule_reader.last_profile_in_file
         previous_context_count = max(0, -int(context_starts[0]))
         next_context_count = max(0, int(context_ends[-1]) - last_profile_in_file)
 

@@ -9,24 +9,17 @@ from twod_mcda.caliop.constants import (
     LAYER_ALTITUDE_R3_INDEX_RANGE,
     LAYER_ALTITUDE_R4_INDEX_RANGE,
     LAYER_ALTITUDE_R5_INDEX_RANGE,
-    NUMBER_OF_VERTICAL_BINS,
-    NUMBER_OF_VFM_VERTICAL_BINS,
     N_30M_BINS_PER_BIN_R1,
     N_30M_BINS_PER_BIN_R2,
     N_30M_BINS_PER_BIN_R3,
     N_30M_BINS_PER_BIN_R4,
     N_30M_BINS_PER_BIN_R5,
-    N_333M_BINS_PER_BIN_R3,
-    N_333M_BINS_PER_BIN_R4,
     N_BINS_R1,
     N_BINS_R2,
     N_BINS_R3,
     N_BINS_R4,
     N_BINS_R5,
     N_LASER_PULSES_PER_5km,
-    N_PROFILES_VFM_R2,
-    N_PROFILES_VFM_R3,
-    N_PROFILES_VFM_R4,
 )
 
 
@@ -183,77 +176,6 @@ def get_nb_regular_30m_vertical_levels():
     )
 
     return nb_30m_vert_levels
-
-
-def unfold_vfm(vfm, put_in_all_alt_grid=False):
-    """
-    Unfold VFM in regular grid with 545 levels.
-
-    :param vfm: folded VFM
-    :param put_in_all_alt_grid: (optional) put in grid with 583 levels (-2 to 40 km). Zero where no data.
-                                default: False
-    :return: unfolded VFM
-    """
-    # Number of VFM masks in the file
-    nb_vfm = vfm.shape[0]
-
-    # Initialization
-    vfm_unfolded = np.zeros(
-        (nb_vfm * N_LASER_PULSES_PER_5km, NUMBER_OF_VFM_VERTICAL_BINS), dtype="uint16"
-    )
-    r4_index_range = (0, 0 + N_BINS_R4)  # Regions R1 and R5 are not in VFM
-    r3_index_range = (r4_index_range[1], r4_index_range[1] + N_BINS_R3)
-    r2_index_range = (r3_index_range[1], r3_index_range[1] + N_BINS_R2)
-
-    # Loop on each VFM mask in the file
-    i_vfm = 0
-    while i_vfm < nb_vfm:
-        # 20.2 to 30.1 km
-        for i in np.arange(N_PROFILES_VFM_R4):
-            start = i_vfm * N_LASER_PULSES_PER_5km + i * N_333M_BINS_PER_BIN_R4
-            vfm_unfolded[
-                start : start + N_333M_BINS_PER_BIN_R4,
-                r4_index_range[0] : r4_index_range[1],
-            ] = vfm[i_vfm, i * N_BINS_R4 : (i + 1) * N_BINS_R4]
-        # 8.2 to 20.2 km
-        for i in np.arange(N_PROFILES_VFM_R3):
-            start = i_vfm * N_LASER_PULSES_PER_5km + i * N_333M_BINS_PER_BIN_R3
-            index_first_bin_r3 = N_PROFILES_VFM_R4 * N_BINS_R4
-            vfm_unfolded[
-                start : start + N_333M_BINS_PER_BIN_R3,
-                r3_index_range[0] : r3_index_range[1],
-            ] = vfm[
-                i_vfm,
-                index_first_bin_r3
-                + i * N_BINS_R3 : index_first_bin_r3
-                + (i + 1) * N_BINS_R3,
-            ]
-        # -0.5 to 8.2 km
-        for i in np.arange(N_PROFILES_VFM_R2):
-            index_first_bin_r2 = (
-                N_PROFILES_VFM_R4 * N_BINS_R4 + N_PROFILES_VFM_R3 * N_BINS_R3
-            )
-            vfm_unfolded[
-                i_vfm * N_LASER_PULSES_PER_5km + i,
-                r2_index_range[0] : r2_index_range[1],
-            ] = vfm[
-                i_vfm,
-                index_first_bin_r2
-                + i * N_BINS_R2 : index_first_bin_r2
-                + (i + 1) * N_BINS_R2,
-            ]
-        i_vfm += 1
-
-    if put_in_all_alt_grid:
-        vfm_unfolded_all = np.zeros(
-            (nb_vfm * N_LASER_PULSES_PER_5km, NUMBER_OF_VERTICAL_BINS), dtype="uint16"
-        )
-        vfm_unfolded_all[
-            :, LAYER_ALTITUDE_R4_INDEX_RANGE[0] : LAYER_ALTITUDE_R2_INDEX_RANGE[1] + 1
-        ] = vfm_unfolded
-        vfm_unfolded = vfm_unfolded_all
-
-    return vfm_unfolded
 
 
 def get_single_shot_index_from_5km_index(i_5km):
