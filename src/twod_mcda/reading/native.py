@@ -18,9 +18,6 @@ from twod_mcda.caliop.geography import get_prof_min_max_indexes_from_lon
 from twod_mcda.reading.hdf import HDF4Reader
 from twod_mcda.reading.variables import CALIOP_L1_VARIABLE_DIMS
 
-MESSAGE_EXECPTION_SLICE_START_END_TYPE = '''f"Error: slice_start_end_type = '{slice_start_end_type}'" \
-                                          "is not defined. Please use 'profindex' or 'longitude'\n"'''
-
 
 class CALIPSOReader:
     """Lazy reader that keeps one HDF4 file open and caches one profile slice."""
@@ -254,7 +251,10 @@ class CALIPSOReader:
                 slice_end,
             )
         else:
-            raise Exception(MESSAGE_EXECPTION_SLICE_START_END_TYPE)
+            raise Exception(
+                f"Error: slice_start_end_type = '{slice_start_end_type}' is not "
+                "defined. Please use 'profindex' or 'longitude'\n"
+            )
 
         data = self._read_sds(key, prof_min, prof_max)
         if do_fillvalue:

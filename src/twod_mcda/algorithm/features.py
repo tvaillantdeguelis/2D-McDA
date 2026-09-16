@@ -173,7 +173,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
         history.sr = remove_detect_from_sr(history.sr, history.feature)
 
     with timer(
-        "Correct sr signal below feature from transmittance using fixed lidar ratio above and below {params.temp_ice_liquid} °C"
+        "Correct sr signal below feature from transmittance using fixed lidar "
+        f"ratio above and below {params.temp_ice_liquid} °C"
     ):
         history.sr, twoway_transmittance_array[:, :] = transmission_correction(
             history.sr, sr, b_mol, history.feature, temperature, params

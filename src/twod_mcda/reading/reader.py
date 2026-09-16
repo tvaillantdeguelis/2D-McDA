@@ -24,10 +24,7 @@ from twod_mcda.caliop.grids import (
     shape_to_regular_30m_vertical_grid,
 )
 from twod_mcda.reading.derived import DerivedVariables
-from twod_mcda.reading.native import (
-    MESSAGE_EXECPTION_SLICE_START_END_TYPE,
-    CALIPSOReader,
-)
+from twod_mcda.reading.native import CALIPSOReader
 from twod_mcda.utils.arrays import as_masked_array
 
 
@@ -106,7 +103,10 @@ class CALIOPRegularGridReader:
                 self._lon_granule_l1, slice_start, slice_end
             )
         else:
-            raise Exception(MESSAGE_EXECPTION_SLICE_START_END_TYPE)
+            raise Exception(
+                f"Error: slice_start_end_type = '{slice_start_end_type}' is not "
+                "defined. Please use 'profindex' or 'longitude'\n"
+            )
         self.lon_min = self._lon_granule_l1.isel(profile=self.prof_min).item()
         self.lat_min = self._lat_granule_l1.isel(profile=self.prof_min).item()
         self.lon_max = self._lon_granule_l1.isel(profile=self.prof_max).item()
