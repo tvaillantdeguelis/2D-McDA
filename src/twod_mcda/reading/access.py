@@ -1,10 +1,10 @@
-"""Load CALIOP variables into labelled xarray datasets."""
+"""Open CALIOP granules and read their variables into labelled xarray datasets."""
 
 import xarray as xr
 
-from twod_mcda.caliop.reader import CALIOPRegularGridReader
+from twod_mcda.reading.reader import CALIOPRegularGridReader
 from twod_mcda.caliop.constants import CALIOP_L1_PRODUCT_TYPE
-from twod_mcda.caliop.variables import CALIOP_L1_PROCESSING_VARIABLES
+from twod_mcda.reading.variables import CALIOP_L1_PROCESSING_VARIABLES
 
 
 def open_granule(
@@ -48,3 +48,23 @@ def read_slice(granule_reader, profile_start, profile_end):
 
     dataset = xr.Dataset(arrays)
     return dataset.set_coords(["Latitude", "Longitude", "Lidar_Data_Altitudes"])
+
+
+def read_adjacent_profiles(request, granule, directory, profile_start, profile_end):
+    """Load context profiles from one adjacent granule, then close its file."""
+
+    with open_granule(
+        request,
+        granule,
+        directory,
+        profile_start,
+        profile_end,
+    ) as adjacent_granule_reader:
+        adjacent_profiles = read_slice(
+            adjacent_granule_reader,
+            adjacent_granule_reader.prof_min,
+            adjacent_granule_reader.prof_max,
+        )
+        adjacent_granule_path = adjacent_granule_reader.filepath
+
+    return adjacent_profiles, adjacent_granule_path

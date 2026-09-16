@@ -1,7 +1,7 @@
 """Top-level processing pipeline.
 
 ``run_granule_pipeline`` is the entry point. It locates and opens one CALIOP
-granule, prepares it for processing (see ``workflow.preparation``), then
+granule, prepares it for processing (see ``preparation``), then
 applies the 2D-McDA scientific algorithm slice by slice.
 
 The result is written to a netCDF product at the end.
@@ -13,14 +13,13 @@ import time
 from .algorithm.composite import merged_feature_masks
 from .algorithm.features import detect_features_in_3_channels
 from .algorithm.surface import detect_surface_in_3_channels
-from .caliop.input import open_granule
+from .config import resolve_processing_request
+from .output.assembly import assemble_results, store_development, store_slice
 from .output.product import write_product
+from .preparation import prepare_granule
+from .reading.access import open_granule
+from .slicing import describe_slice, load_slice, trim_slice_context
 from .utils.timing import timer
-from .workflow.output_assembly import assemble_results, store_development, store_slice
-from .workflow.preparation import prepare_granule
-from .workflow.request import resolve_processing_request
-from .workflow.slice_loading import describe_slice, load_slice
-from .workflow.slicing import trim_slice_context
 
 
 def run_granule_pipeline(cfg):

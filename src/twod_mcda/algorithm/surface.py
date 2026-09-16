@@ -9,7 +9,7 @@ from twod_mcda.caliop.physics import (
     rms_from_P_domain_to_betap_domain,
 )
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
-from twod_mcda.caliop.xarray_utils import as_masked_array
+from twod_mcda.utils.arrays import as_masked_array
 from twod_mcda.parameters import SurfaceDetectionParameters
 from twod_mcda.utils.timing import timer
 

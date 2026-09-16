@@ -6,15 +6,40 @@ neighboring granules, printing the run summary, and allocating the empty
 whole-granule output datasets.
 """
 
+from dataclasses import dataclass
+
+import numpy as np
 import xarray as xr
 
+from twod_mcda.reading.access import read_adjacent_profiles
+from twod_mcda.output.assembly import empty_output
 from twod_mcda.parameters import NB_PROF_CONTEXT, NB_PROF_SLICE
+from twod_mcda.slicing import plan_slices
+from twod_mcda.utils.reporting import print_processing_summary
 from twod_mcda.utils.timing import timer
-from twod_mcda.workflow.models import GranulePreparation
-from twod_mcda.workflow.neighbors import read_adjacent_profiles
-from twod_mcda.workflow.output_assembly import empty_output
-from twod_mcda.workflow.reporting import print_processing_summary
-from twod_mcda.workflow.slicing import plan_slices
+
+
+@dataclass
+class GranulePreparation:
+    """Everything computed once for a granule, before running the algorithm.
+
+    Built by ``prepare_granule``: the planned slices, the neighboring-granule
+    context profiles, and the empty whole-granule output datasets that the
+    algorithm will fill slice by slice.
+    """
+
+    profile_starts: np.ndarray
+    profile_ends: np.ndarray
+    context_starts: np.ndarray
+    context_ends: np.ndarray
+    slice_count: int
+    profile_count: int
+    last_profile_in_file: int
+    previous_profiles: xr.Dataset | None
+    next_profiles: xr.Dataset | None
+    altitude: xr.DataArray
+    granule_detection_product: xr.Dataset
+    granule_development_data: xr.Dataset
 
 
 def _load_context_profiles(request, previous_context_count, next_context_count):

@@ -1,1 +1,1 @@
-"""CALIOP product adapters and domain conventions."""
+"""CALIOP instrument constants, physics and grid conventions."""

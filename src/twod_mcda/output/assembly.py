@@ -1,10 +1,11 @@
 """Assemble whole-granule output datasets from per-slice results."""
 
+from dataclasses import dataclass
+
 import numpy as np
 import xarray as xr
 
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
-from twod_mcda.workflow.models import ProcessingResult
 
 PROFILE_METADATA = (
     "Profile_ID",
@@ -20,6 +21,17 @@ DETECTION_MASKS = (
     "Detection_Flags_1064",
     "Composite_Detection_Flags",
 )
+
+
+@dataclass
+class ProcessingResult:
+    """Arrays needed to write the final 2D-McDA product."""
+
+    data: xr.Dataset
+    development: xr.Dataset
+    altitude: xr.DataArray
+    longitude_min: float
+    longitude_max: float
 
 
 def empty_output(profile_count, altitude, profile_start=0):

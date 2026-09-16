@@ -1,16 +1,14 @@
-"""Mask morphology, thresholding and smoothing operations."""
+"""Neighborhood operations on the detection mask.
+
+These decide whether a pixel belongs to a real structure by looking at the
+pixels around it: windowing, connected patterns of candidate pixels, and small
+horizontal strips. Each one pairs a masked-array wrapper with a Numba kernel,
+which is why the mask has to be converted through ``feature_for_numba`` first.
+"""
 
 import numpy as np
 from numba import jit
-from scipy.ndimage import convolve1d
 
-from twod_mcda.caliop.constants import (
-    FILL_VALUE_FLOAT,
-    N_30M_BINS_PER_BIN_R1,
-    N_30M_BINS_PER_BIN_R2,
-    N_BINS_R1,
-    N_BINS_R2,
-)
 from twod_mcda.parameters import (
     FLAG_AFA,
     FLAG_FA,
@@ -30,45 +28,6 @@ def feature_for_numba(feature):
     data[mask] = FLAG_SURFACE
 
     return data, mask
-
-
-def apply_surface_detection(feature, surf_alt_index):
-    """Put FLAG_SURFACE where and below the surface was detected"""
-
-    # Initialization
-    nb_prof = feature.shape[0]
-    new_feature = np.ma.copy(feature)
-
-    # Loop on profiles
-    for i in np.arange(nb_prof):
-        # If surface detected
-        if surf_alt_index[i] != 999:
-            # Put flag from lowest bin to surface altitude
-            new_feature[i, : surf_alt_index[i] + 1] = FLAG_SURFACE
-
-    return new_feature
-
-
-def apply_threshold(k, feature, sr, sr_sigma, where_FA=False):
-    """Put FLAG_MAYBE where signal above threshold"""
-
-    # Initialization
-    new_feature = np.ma.copy(feature)
-
-    # Define threshold
-    sr_maybe = 1 + k * sr_sigma
-
-    if where_FA:
-        # Put flag where ATSR > threshold and where ATSR is not masked
-        new_feature[np.ma.where(sr > sr_maybe)] = FLAG_MAYBE
-    else:
-        # Put flag where ATSR > threshold and where feature is still "nothing"
-        new_feature[np.ma.where((sr > sr_maybe) & (new_feature == FLAG_NOTHING))] = (
-            FLAG_MAYBE
-        )
-
-    return new_feature
-
 
 @jit(nopython=True)
 def apply_window_jit(
@@ -142,7 +101,6 @@ def apply_window_jit(
 
     return feature
 
-
 def apply_window(
     height_window, width_window, feature, FLAG_DETECTION_LEVEL, min_percent=0.5
 ):
@@ -182,7 +140,6 @@ def apply_window(
     new_feature[detected_pixels == 1] = FLAG_MAYBE
 
     return np.ma.array(new_feature, mask=feature_mask)
-
 
 @jit(nopython=True)
 def replace_maybe_jit(
@@ -284,7 +241,6 @@ def replace_maybe_jit(
 
     return feature
 
-
 def replace_maybe(
     n, feature, FLAG_DETECTION_LEVEL, prev_detect=True, prevprev_detect=False
 ):
@@ -314,135 +270,6 @@ def replace_maybe(
         )
 
     return np.ma.array(new_feature, mask=feature_mask)
-
-
-def fill_likely_artifact(params, feature, FLAG_VERY_HIGH_ECHO):
-    """Put flag "Likely artifact" below high signal points"""
-
-    # Initialization
-    nb_alt = feature.shape[1]
-    nb_prof = feature.shape[0]
-    new_feature = np.ma.copy(feature)
-
-    # Loop on profiles
-    for i in range(nb_prof):
-        # From bottom to top
-        for j in np.arange(nb_alt):
-            # Look for FLAG_VERY_HIGH_ECHO
-            if new_feature[i, j] == FLAG_VERY_HIGH_ECHO:
-                # If FLAG_VERY_HIGH_ECHO at the very bottom
-                if j == 0:
-                    # Nothing to flag below
-                    continue
-                # If bin below is FLAG_VERY_HIGH_ECHO
-                elif new_feature[i, j - 1] == FLAG_VERY_HIGH_ECHO:
-                    # Same layer, already done
-                    continue
-                # Else, flag below on the params.nb_bins_PMT_artifact extent
-                else:
-                    # Go down
-                    j2 = j - 1
-                    while (
-                        (j2 >= 0)
-                        & (j - j2 <= params.nb_bins_PMT_artifact)
-                        & (new_feature[i, j2] == FLAG_NOTHING)
-                    ):
-                        new_feature[i, j2] = FLAG_LIKELY_ARTIFACT
-                        j2 -= 1
-
-    return new_feature
-
-
-def reput_low_confidence_flags(feature, feature_before_av):
-    """Reput all not confident flags where overwritten during averaging"""
-
-    # Initialization
-    new_feature = np.copy(feature)
-
-    # Reput FA and AFA where they were
-    new_feature[feature_before_av == FLAG_FA] = FLAG_FA
-    new_feature[feature_before_av == FLAG_AFA] = FLAG_AFA
-    new_feature[feature_before_av == FLAG_SMALL_STRIPS] = FLAG_SMALL_STRIPS
-    new_feature[feature_before_av == FLAG_LIKELY_ARTIFACT] = FLAG_LIKELY_ARTIFACT
-
-    return new_feature
-
-
-def fill_fully_attenuated(feature):
-    """Fill with flag 'Fully Attenuated' from lowest altitude to first feature"""
-
-    # Initialization
-    nb_prof = feature.shape[0]
-    nb_alt = feature.shape[1]
-    new_feature = np.ma.copy(feature)
-
-    # Loop on profiles
-    for i in np.arange(nb_prof):
-        # If surface detected
-        if new_feature[i, 0] == FLAG_SURFACE:
-            # No 'Fully Attenuated' here
-            continue
-        # If surface not detected
-        else:
-            # From lowest altitude go up until reaching a layer
-            j = 0
-            # While layer not reached
-            while (
-                (new_feature[i, j] == FLAG_NOTHING)
-                | (new_feature[i, j] == FLAG_LIKELY_ARTIFACT)
-            ) & (j < nb_alt):
-                # Flag 'Fully Attenuated'
-                new_feature[i, j] = FLAG_FA
-                j += 1
-                # If reach top (30.1 km)
-                if j >= nb_alt:
-                    # Remove all FA in the profile
-                    new_feature[i, :] = FLAG_NOTHING
-                    # And stop
-                    break
-
-    return new_feature
-
-
-def FLAG_WEAK_SIGNAL(params, feature, sr, sr_sigma):
-    """Flag where, between detected layers, more than ratio_nb are below
-    sr_thresold"""
-
-    # Initialization
-    sr_thresold = sr_sigma * params.weak_signal_ratio_threshold
-    nb_prof = feature.shape[0]
-    nb_alt = feature.shape[1]
-    new_feature = np.ma.copy(feature)
-
-    # Loop on profiles
-    for i in np.arange(nb_prof):
-        # From lowest altitude go up
-        nb_below = 0  # nb ranges below threshold
-        nb_tot = 0  # total nb ranges in the region between 2 layers
-        j = 0
-        # While top not reached
-        while j < nb_alt:
-            if new_feature[i, j] != FLAG_NOTHING:
-                j += 1  # not yet in region with no detection
-                continue
-            cs_min_index = j  # min index of the "CS" region
-            while new_feature[i, j] == FLAG_NOTHING:
-                nb_tot += 1
-                if sr[i, j] < sr_thresold[i, j]:
-                    nb_below += 1
-                j += 1
-                if j >= nb_alt:  # if reach top of column
-                    break
-            cs_max_index = j - 1  # max index of the "CS" region
-            # If fraction_nb_below_threshold below limit put flag in this region
-            if nb_below / nb_tot > params.weak_signal_ratio:
-                if cs_max_index < nb_alt - 1:  # not if no layer above
-                    new_feature[i, cs_min_index : cs_max_index + 1] = FLAG_AFA
-            nb_below = 0
-            nb_tot = 0
-
-    return new_feature
-
 
 @jit(nopython=True)
 def fill_small_strips_jit(feature, nb_prof_min):
@@ -493,7 +320,6 @@ def fill_small_strips_jit(feature, nb_prof_min):
 
     return feature
 
-
 def fill_small_strips(params, feature):
     """Flag short horizontal strips between low-confidence regions."""
 
@@ -513,135 +339,3 @@ def fill_small_strips(params, feature):
         new_feature,
         mask=feature_mask,
     )
-
-
-def remove_detect_from_sr(sr, feature):
-    """Remove detected pixel from the ATSR signal"""
-
-    # Mask where not "nothing"
-    new_sr = np.ma.masked_where(feature != FLAG_NOTHING, sr)
-
-    return new_sr
-
-
-def average_below_8_2(sr, sr_sigma):
-    """Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)"""
-
-    # Initialization
-    new_sr = np.ma.copy(sr)
-    nb_prof = sr.shape[0]
-    nb_bins_below_8_2km = (
-        N_30M_BINS_PER_BIN_R1 * N_BINS_R1 + N_30M_BINS_PER_BIN_R2 * N_BINS_R2
-    )
-
-    # Look for horizontal offset if 1st profile not the start of a 1-km profile
-    index_vertical_bin = 100  # random bin in the R2 region
-    if sr[0, index_vertical_bin] == sr[1, index_vertical_bin]:
-        if sr[1, index_vertical_bin] == sr[2, index_vertical_bin]:
-            offset_h = 0
-        else:
-            offset_h = 2
-    else:
-        offset_h = 1
-
-    # Average 60 m × 1 km (2 verticals × 3 horizontals)
-    i_array = np.arange(offset_h, nb_prof - 2, 3)  # 3 horizontals
-    j_array = np.arange(0, nb_bins_below_8_2km, 2)  # 2 verticals
-    i_progress = 0
-    for i in i_array:
-        for j in j_array:
-            new_sr[i : i + 3, j : j + 2] = np.ma.mean(sr[i : i + 3, j : j + 2])
-
-    # Remask where was already masked
-    new_sr.mask = np.copy(sr.mask)
-
-    # Adapt SR threshold below 8.2 km
-    sr_sigma[:nb_bins_below_8_2km] = sr_sigma[:nb_bins_below_8_2km] / np.sqrt(6)
-
-    return new_sr, sr_sigma
-
-
-def gaussian_2d_window(
-    width_window,
-    horizontal_gauss_sigma,
-    ab_signal,
-    feature,
-    ab_sigma,
-    height_window=7,
-    vertical_gauss_sigma=3,
-):
-    """Apply a 2-D gaussian averaging window to the AB signal"""
-
-    # Initialization
-    ab2 = np.ma.asarray(ab_signal).filled(FILL_VALUE_FLOAT).astype(float, copy=False)
-    new_ab = np.full(ab_signal.shape, FILL_VALUE_FLOAT, dtype=float)
-    copy_feature = np.ma.asarray(feature).filled(FLAG_SURFACE)
-
-    # width_window should be odd numbers
-    if width_window % 2 != 1:
-        raise ValueError(f"width_window (= {width_window}) should be odd")
-
-    # Apply gaussian 2-D averaging
-    h_nside = np.int64((width_window - 1) / 2)
-    x = np.arange(width_window) - h_nside
-    v_nside = np.int64((height_window - 1) / 2)
-    y = np.arange(height_window) - v_nside
-    horizontal_gaussian = np.exp(-(x**2) / (2 * horizontal_gauss_sigma**2))
-    vertical_gaussian = np.exp(-(y**2) / (2 * vertical_gauss_sigma**2))
-    nb_prof_averaged = np.sum(np.outer(horizontal_gaussian, vertical_gaussian))
-
-    # Normalize by the locally available Gaussian weights so masked samples do
-    # not reduce the average. The 2-D Gaussian is separable, hence two 1-D
-    # convolutions give the same result at a much lower cost.
-    valid = ab2 != FILL_VALUE_FLOAT
-    weighted_signal = np.where(valid, ab2, 0.0)
-    numerator = convolve1d(
-        weighted_signal,
-        horizontal_gaussian,
-        axis=0,
-        mode="constant",
-        cval=0.0,
-    )
-    numerator = convolve1d(
-        numerator,
-        vertical_gaussian,
-        axis=1,
-        mode="constant",
-        cval=0.0,
-    )
-    denominator = convolve1d(
-        valid.astype(float),
-        horizontal_gaussian,
-        axis=0,
-        mode="constant",
-        cval=0.0,
-    )
-    denominator = convolve1d(
-        denominator,
-        vertical_gaussian,
-        axis=1,
-        mode="constant",
-        cval=0.0,
-    )
-
-    special = (
-        (copy_feature == FLAG_FA)
-        | (copy_feature == FLAG_AFA)
-        | (copy_feature == FLAG_LIKELY_ARTIFACT)
-        | (copy_feature == FLAG_SMALL_STRIPS)
-    )
-    eligible = (valid | special) & (denominator != 0)
-    if h_nside:
-        eligible[:h_nside, :] = False
-        eligible[-h_nside:, :] = False
-    if v_nside:
-        eligible[:, :v_nside] = False
-        eligible[:, -v_nside:] = False
-    np.divide(numerator, denominator, out=new_ab, where=eligible)
-
-    # Mask where FILL_VALUE_FLOAT
-    new_ab = np.ma.masked_where(new_ab == FILL_VALUE_FLOAT, new_ab)
-    # Adapt SR threshold
-    ab_sigma = ab_sigma / np.sqrt(nb_prof_averaged)
-
-    return new_ab, ab_sigma

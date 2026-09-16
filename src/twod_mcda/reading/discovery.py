@@ -9,7 +9,27 @@ from twod_mcda.caliop.constants import (
     CALIOP_L1_PRODUCT_TYPE,
     GRANULE_TIME_FMT,
 )
-from twod_mcda.caliop.granule import parse_granule_time
+
+
+def parse_granule_time(granule):
+    """
+    Parse a granule into its observation datetime.
+
+    Parameters
+    ----------
+    granule : str
+        Granule, e.g. "2013-01-11T03-25-54ZD".
+
+    Returns
+    -------
+    datetime
+        Observation start time.
+    """
+
+    return datetime.strptime(
+        granule[:-2],  # Remove the trailing 'ZD' or 'ZN'
+        GRANULE_TIME_FMT,
+    )
 
 
 def extract_granule_time(filename):

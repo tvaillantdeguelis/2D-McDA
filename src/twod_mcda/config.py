@@ -1,5 +1,6 @@
 """Resolve pipeline configuration into a processing request."""
 
+from dataclasses import dataclass
 from pathlib import Path
 import re
 
@@ -9,18 +10,40 @@ from twod_mcda.caliop.constants import (
     LIDAR_DATA_ALTITUDES,
     REGION_4_ALTITUDE_BOUNDARIES,
 )
-from twod_mcda.caliop.discovery import (
+from twod_mcda.caliop.grids import alt_to_regular_30m_vertical_grid
+from twod_mcda.reading.discovery import (
     find_granule_file,
     find_neighbor_granules,
+    parse_granule_time,
 )
-from twod_mcda.caliop.granule import parse_granule_time
-from twod_mcda.caliop.grids import alt_to_regular_30m_vertical_grid
 from twod_mcda.version import get_full_version
-from twod_mcda.workflow.models import ProcessingRequest
 
 _GRANULE_IN_FILENAME_PATTERN = re.compile(
     r"\.(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z[DN])\.hdf$"
 )
+
+
+@dataclass(frozen=True)
+class ProcessingRequest:
+    """Resolved inputs and options for one CALIOP granule."""
+
+    granule: str
+    caliop_version: str
+    current_granule_directory: Path
+    previous_granule: str | None
+    previous_granule_directory: Path | None
+    next_granule: str | None
+    next_granule_directory: Path | None
+    subset_active: bool
+    subset_mode: str
+    subset_start: int | float | None
+    subset_end: int | float | None
+    save_development_data: bool
+    output_version: str
+    output_product_type: str
+    output_directory: Path
+    maximum_altitude_km: int | float
+    maximum_altitude_index: int | None
 
 
 def _get_granule(file_path):

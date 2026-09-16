@@ -1,1 +1,0 @@
-"""Granule-processing orchestration."""
