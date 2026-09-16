@@ -22,12 +22,11 @@ def open_granule(
         version=request.caliop_version,
         data_type=CALIOP_L1_PRODUCT_TYPE,
         granule=granule,
-        grid="333mx30m",
         slice_start=profile_start,
         slice_end=profile_end,
         slice_start_end_type=subset_mode,
         folderpath=str(directory),
-        index30m_alt_max=request.maximum_altitude_index,
+        max_altitude_index=request.maximum_altitude_index,
     )
 
 

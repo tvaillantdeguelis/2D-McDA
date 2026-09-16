@@ -1,47 +1,62 @@
-"""Read CALIOP products on their native grid, straight from the HDF4 file.
+"""Read CALIOP products on their native grid, straight from the granule file.
 
-``CALIPSOReader`` is the lowest labelled layer above ``hdf.HDF4Reader``: it keeps
-one file open, caches one profile slice, resolves fill values and gives every
-array its CALIOP dimension names. It knows nothing about the regular 30 m grid
-or about derived variables; that is ``reader.CALIOPRegularGridReader``.
+``CALIPSOReader`` is the lowest layer of the reading stack: it keeps one file
+open, caches the profile slice being processed, resolves fill values and gives
+every array its 2D-McDA dimension names. It knows nothing about the regular
+30 m grid or about derived variables; that is ``reader.CALIOPRegularGridReader``.
+
+CALIOP Level 1 granules are HDF4 files, read here through the netCDF4 engine:
+``libnetcdf`` is built with HDF4 support on conda-forge, so every SDS is
+readable as an ordinary netCDF variable, with its own dimension names and
+attributes. Only SDSs are reachable this way, not the HDF4 Vdata tables. The
+two vertical grids live in both, with identical values, so nothing is lost.
 """
 
 import numpy as np
 import xarray as xr
 
-from twod_mcda.caliop.constants import (
-    FILL_VALUE_FLOAT,
-    NUMBER_OF_VERTICAL_BINS,
-    NUMBER_OF_VERTICAL_BINS_MET,
-)
-from twod_mcda.caliop.geography import get_prof_min_max_indexes_from_lon
-from twod_mcda.reading.hdf import HDF4Reader
-from twod_mcda.reading.variables import CALIOP_L1_VARIABLE_DIMS
+from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
+
+#: Dimension carrying the profiles of a granule, as named in the file.
+PROFILE_DIMENSION = "Record_Number"
+
+#: File dimensions renamed to the names used throughout 2D-McDA. Any other
+#: dimension keeps its own name, lowercased.
+DIMENSION_NAMES = {
+    PROFILE_DIMENSION: "profile",
+    "Lidar_Data_Altitudes": "lidar_altitude",
+    "Met_Data_Altitudes": "met_altitude",
+}
+
+#: Vertical grids read in double precision: the regular 30 m grid is
+#: extrapolated from them, and the file stores them as float32.
+VERTICAL_GRID_VARIABLES = ("Lidar_Data_Altitudes", "Met_Data_Altitudes")
 
 
 class CALIPSOReader:
-    """Lazy reader that keeps one HDF4 file open and caches one profile slice."""
+    """Lazy reader that keeps one CALIOP file open and caches one profile slice."""
 
     def __init__(self, filepath):
         self.filepath = filepath
-        self._reader = HDF4Reader(filepath).__enter__()
-        self._sds = self._reader.get_sds_keys()
-        self._metadata = {
-            key: self._reader.get_metadata(key)
-            for key in self._reader.get_metadata_keys()
-        }
-        self._fill_values = {}
+        self._dataset = xr.open_dataset(
+            filepath,
+            engine="netcdf4",
+            # Fill values are applied by ``get_data`` instead: several CALIOP
+            # variables carry -9999 without declaring ``_FillValue``, and
+            # xarray's own masking would leave those values in the data.
+            mask_and_scale=False,
+        )
+        self.nb_profiles = self._dataset.sizes[PROFILE_DIMENSION]
         self._active_profile_bounds = None
         self._slice_cache = {}
         self._static_cache = {}
-        self.nb_profiles = self._sds["Latitude"][1][0]
 
     def close(self):
-        """Close the underlying HDF4 handles."""
+        """Close the underlying granule file."""
 
-        if self._reader is not None:
-            self._reader.__exit__(None, None, None)
-            self._reader = None
+        if self._dataset is not None:
+            self._dataset.close()
+            self._dataset = None
 
     def __enter__(self):
         return self
@@ -50,170 +65,97 @@ class CALIPSOReader:
         self.close()
 
     def get_cal_keys(self):
-        return self._sds.keys() | self._metadata.keys()
+        """Return every variable the granule file holds."""
 
-    def get_fillvalue(self, key):
-        if key in self._metadata:
-            return None
-        if key not in self._fill_values:
-            fill_value = self._reader.get_fillvalue(key)
-            if fill_value is None:
-                fill_value = FILL_VALUE_FLOAT
-            self._fill_values[key] = fill_value
-        return self._fill_values[key]
-
-    def _profile_axis(self, key):
-        shape = self._sds[key][1]
-        if shape[0] == self.nb_profiles:
-            return 0
-        if len(shape) > 1 and shape[1] == self.nb_profiles:
-            return 1
-        return None
+        return self._dataset.variables.keys()
 
     def is_profile_variable(self, key):
-        """Return whether an SDS contains the granule profile dimension."""
+        """Return whether a variable carries the granule profile dimension."""
 
-        return key in self._sds and self._profile_axis(key) is not None
-
-    @staticmethod
-    def _squeeze_non_profile_axes(data, original_shape, profile_axis):
-        axes = tuple(
-            axis
-            for axis, size in enumerate(original_shape)
-            if size == 1 and axis != profile_axis
+        return (
+            key in self._dataset.variables
+            and PROFILE_DIMENSION in self._dataset[key].dims
         )
-        if axes:
-            return data.squeeze(
-                dim=tuple(data.dims[axis] for axis in axes),
-                drop=True,
-            )
-        return data
 
-    def _dimension_names(
-        self,
-        key,
-        data,
-        profile_start=0,
-        profile_axis=None,
-    ):
-        """Attach stable semantic dimensions to one CALIOP variable."""
+    def get_fillvalue(self, key):
+        """Return the fill value of a variable.
 
-        if not isinstance(data, xr.DataArray):
-            data = xr.DataArray(
-                data,
-                dims=tuple(f"hdf_dim_{axis}" for axis in range(data.ndim)),
-                name=key,
-            )
-        declared = CALIOP_L1_VARIABLE_DIMS.get(key)
-        if declared is not None and len(declared) == data.ndim:
-            dims = declared
-        else:
-            dims = []
-            used = set()
-            for axis, size in enumerate(data.shape):
-                if axis == profile_axis or (
-                    profile_axis is None
-                    and size == self.nb_profiles
-                    and "profile" not in used
-                ):
-                    dim = "profile"
-                elif size == NUMBER_OF_VERTICAL_BINS and "lidar_altitude" not in used:
-                    dim = "lidar_altitude"
-                elif size == NUMBER_OF_VERTICAL_BINS_MET and "met_altitude" not in used:
-                    dim = "met_altitude"
-                else:
-                    dim = f"{key.lower()}_dim_{axis}"
-                dims.append(dim)
-                used.add(dim)
-            dims = tuple(dims)
+        CALIOP declares ``_FillValue`` on most variables but not on all of
+        them: the meteorological profiles carry -9999 without declaring it,
+        hence the fallback.
+        """
 
+        return self._dataset[key].attrs.get("_FillValue", FILL_VALUE_FLOAT)
+
+    def _label(self, key, array, profile_start):
+        """Rename the file dimensions and index the profiles of the slice."""
+
+        dims = tuple(DIMENSION_NAMES.get(dim, dim.lower()) for dim in array.dims)
         coords = {}
         if "profile" in dims:
-            profile_size = data.shape[dims.index("profile")]
+            profile_size = array.shape[dims.index("profile")]
             coords["profile"] = np.arange(
                 profile_start,
                 profile_start + profile_size,
                 dtype=int,
             )
         return xr.DataArray(
-            data.data,
+            array.data,
             dims=dims,
             coords=coords,
             name=key,
-            attrs=data.attrs,
+            attrs=array.attrs,
         )
 
-    def _read_sds(self, key, profile_min, profile_max):
-        shape = self._sds[key][1]
-        profile_axis = self._profile_axis(key)
+    def _read(self, key, profile_min, profile_max):
+        """Read one variable, over the requested profiles when it has any."""
 
-        if profile_axis is None:
+        if not self.is_profile_variable(key):
             if key not in self._static_cache:
-                data = self._reader.get_data(key, do_squeeze=False)
-                if not isinstance(data, xr.DataArray):
-                    data = xr.DataArray(
-                        data,
-                        dims=tuple(f"hdf_dim_{axis}" for axis in range(data.ndim)),
-                        name=key,
-                    )
-                self._static_cache[key] = self._squeeze_non_profile_axes(
-                    data,
-                    shape,
-                    None,
-                )
-                self._static_cache[key] = self._dimension_names(
-                    key,
-                    self._static_cache[key],
-                )
+                self._static_cache[key] = self._load(key)
             return self._static_cache[key]
 
         bounds = (profile_min, profile_max)
         if bounds != self._active_profile_bounds:
             self._active_profile_bounds = bounds
             self._slice_cache.clear()
-        if key in self._slice_cache:
-            return self._slice_cache[key]
+        if key not in self._slice_cache:
+            self._slice_cache[key] = self._load(key, profile_min, profile_max)
+        return self._slice_cache[key]
 
-        start_index = 0 if profile_min is None else profile_min
-        end_index = self.nb_profiles - 1 if profile_max is None else profile_max
-        start = [0] * len(shape)
-        count = list(shape)
-        start[profile_axis] = start_index
-        count[profile_axis] = end_index - start_index + 1
-        data = self._reader.get_data(
-            key,
-            start=start,
-            count=count,
-            do_squeeze=False,
-        )
-        if not isinstance(data, xr.DataArray):
-            data = xr.DataArray(
-                data,
-                dims=tuple(f"hdf_dim_{axis}" for axis in range(data.ndim)),
-                name=key,
+    def _load(self, key, profile_min=None, profile_max=None):
+        """Read one variable off disk and give it its 2D-McDA labels."""
+
+        array = self._dataset[key]
+
+        profile_start = 0
+        if PROFILE_DIMENSION in array.dims:
+            profile_start = 0 if profile_min is None else int(profile_min)
+            profile_stop = (
+                self.nb_profiles if profile_max is None else int(profile_max) + 1
             )
-        data = self._squeeze_non_profile_axes(data, shape, profile_axis)
-        squeezed_before_profile = sum(
-            size == 1 for axis, size in enumerate(shape) if axis < profile_axis
-        )
-        effective_profile_axis = profile_axis - squeezed_before_profile
-        data = self._dimension_names(
-            key,
-            data,
-            start_index,
-            effective_profile_axis,
-        )
-        self._slice_cache[key] = data
-        return data
+            array = array.isel(
+                {PROFILE_DIMENSION: slice(profile_start, profile_stop)}
+            )
 
-    def get_data(
-        self,
-        key,
-        slice_start=None,
-        slice_end=None,
-        slice_start_end_type="profindex",
-        do_fillvalue=True,
-    ):
+        # CALIOP stores its per-profile scalars with a trailing dimension of
+        # length one. The profile dimension is never squeezed, so that a
+        # single-profile slice keeps its shape.
+        squeezable = [
+            dim
+            for dim in array.dims
+            if dim != PROFILE_DIMENSION and array.sizes[dim] == 1
+        ]
+        if squeezable:
+            array = array.squeeze(dim=squeezable, drop=True)
+
+        array = array.load()
+        if key in VERTICAL_GRID_VARIABLES:
+            array = array.astype("float64")
+
+        return self._label(key, array, profile_start)
+
+    def get_data(self, key, slice_start=None, slice_end=None, do_fillvalue=True):
         """
         Get data for the key parameter from slice_start to slice_end.
 
@@ -222,44 +164,16 @@ class CALIPSOReader:
                             default: the first profile
         :param slice_end: (optional) end profile of the slice to load (included)
                           default: the end of the data
-        :param slice_start_end_type: 'profindex' if profile indexes provided or 'longitude' if
-                                     longitudes provided (longitudes because increases/decreases
-                                     monotonously on one granule unlike latitudes)
-                                     default: 'profindex'
         :param do_fillvalue: mask where fillvalue
         :return: labelled xarray data array
         """
 
-        if key in self._metadata:
-            values = np.asanyarray(self._metadata[key]).squeeze()
-            raw = xr.DataArray(
-                values,
-                dims=tuple(f"metadata_dim_{axis}" for axis in range(values.ndim)),
-                name=key,
-            )
-            return self._dimension_names(key, raw)
-        if key not in self._sds:
-            raise Exception(f"Error: key = '{key}' not found.\n")
+        if key not in self._dataset.variables:
+            raise KeyError(f"Error: key = '{key}' not found in {self.filepath}.")
 
-        if slice_start_end_type == "profindex":
-            prof_min, prof_max = slice_start, slice_end
-        elif slice_start_end_type == "longitude":
-            longitude = self.get_data("Longitude", do_fillvalue=False)
-            prof_min, prof_max = get_prof_min_max_indexes_from_lon(
-                longitude,
-                slice_start,
-                slice_end,
-            )
-        else:
-            raise Exception(
-                f"Error: slice_start_end_type = '{slice_start_end_type}' is not "
-                "defined. Please use 'profindex' or 'longitude'\n"
-            )
-
-        data = self._read_sds(key, prof_min, prof_max)
+        data = self._read(key, slice_start, slice_end)
         if do_fillvalue:
             fill_value = self.get_fillvalue(key)
             data = data.where(data != fill_value)
             data.attrs["_FillValue"] = fill_value
         return data
-

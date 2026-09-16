@@ -47,7 +47,6 @@ class DerivedVariables:
             key,
             self.prof_min,
             self.prof_max,
-            "profindex",
             do_fillvalue,
         )
         return as_masked_array(data) if do_fillvalue else data.values

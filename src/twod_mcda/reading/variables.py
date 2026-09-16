@@ -1,52 +1,4 @@
-"""CALIOP Level 1 variable registries used by the processing workflow."""
-
-CALIOP_L1_NATIVE_VARIABLES = (
-    "Latitude",
-    "Longitude",
-    "Lidar_Data_Altitudes",
-    "Met_Data_Altitudes",
-    "Profile_ID",
-    "Profile_Time",
-    "Profile_UTC_Time",
-    "Total_Attenuated_Backscatter_532",
-    "Perpendicular_Attenuated_Backscatter_532",
-    "Attenuated_Backscatter_1064",
-    "Parallel_RMS_Baseline_532",
-    "Perpendicular_RMS_Baseline_532",
-    "RMS_Baseline_1064",
-    "Spacecraft_Altitude",
-    "Calibration_Constant_532",
-    "Calibration_Constant_1064",
-    "Depolarization_Gain_Ratio_532",
-    "Laser_Energy_532",
-    "Laser_Energy_1064",
-    "Parallel_Amplifier_Gain_532",
-    "Perpendicular_Amplifier_Gain_532",
-    "Amplifier_Gain_1064",
-    "Noise_Scale_Factor_532_Parallel",
-    "Noise_Scale_Factor_532_Perpendicular",
-    "Noise_Scale_Factor_1064",
-    "Number_Bins_Shift",
-    "Molecular_Number_Density",
-    "Ozone_Number_Density",
-    "Temperature",
-    "IGBP_Surface_Type",
-    "Surface_Elevation",
-    "Off_Nadir_Angle",
-)
-
-CALIOP_L1_DERIVED_VARIABLES = (
-    "Parallel_Attenuated_Backscatter_532",
-    "Molecular_Parallel_Attenuated_Backscatter_532",
-    "Molecular_Perpendicular_Attenuated_Backscatter_532",
-    "Molecular_Attenuated_Backscatter_1064",
-    "Molecular_Parallel_Backscatter_532",
-    "Molecular_Perpendicular_Backscatter_532",
-    "Molecular_Backscatter_1064",
-    "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Parallel",
-    "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_532_Perpendicular",
-    "Attenuated_Scattering_Ratio_Uncertainty_Standard_Deviation_1064",
-)
+"""CALIOP Level 1 variable registry used by the processing workflow."""
 
 # Variables read by the current 2D-McDA algorithm, in its historical order.
 CALIOP_L1_PROCESSING_VARIABLES = (
@@ -85,25 +37,3 @@ CALIOP_L1_PROCESSING_VARIABLES = (
     "Surface_Elevation",
     "Off_Nadir_Angle",
 )
-
-CALIOP_L1_VARIABLE_DIMS = {
-    "Latitude": ("profile",),
-    "Longitude": ("profile",),
-    "Lidar_Data_Altitudes": ("lidar_altitude",),
-    "Met_Data_Altitudes": ("met_altitude",),
-    "Profile_ID": ("profile",),
-    "Profile_Time": ("profile",),
-    "Profile_UTC_Time": ("profile",),
-    "Total_Attenuated_Backscatter_532": (
-        "profile",
-        "lidar_altitude",
-    ),
-    "Perpendicular_Attenuated_Backscatter_532": ("profile", "lidar_altitude"),
-    "Attenuated_Backscatter_1064": ("profile", "lidar_altitude"),
-    "Molecular_Number_Density": ("profile", "met_altitude"),
-    "Ozone_Number_Density": ("profile", "met_altitude"),
-    "Temperature": ("profile", "met_altitude"),
-}
-
-for _name in CALIOP_L1_NATIVE_VARIABLES:
-    CALIOP_L1_VARIABLE_DIMS.setdefault(_name, ("profile",))

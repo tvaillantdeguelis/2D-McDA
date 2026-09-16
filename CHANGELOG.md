@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.6.0] - 2026-09-16
+
+### Changed
+
+- Read CALIOP granules with the netCDF4 engine instead of pyhdf (2× faster, 25% shorter).
+- Renamed `index30m_alt_max` to `max_altitude_index`.
+- Moved the coarse-resolution averaging to `visualization/coarsening.py`.
+
+### Fixed
+
+- Fixed the 60 m vertical averaging, which overran on an odd number of levels.
+- Fixed the viewer passing the CALIOP version with its `V` prefix.
+- Fixed reading from a reader built on longitude bounds.
+
+### Removed
+
+- Removed the `grid` argument of `CALIOPRegularGridReader`, `HDF4Reader`, the variable dimension registries, and unused reader state.
+
 ## [2.5.4] - 2026-09-08
 
 ### Fix
