@@ -287,7 +287,7 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         Get original and derived CALIOP parameters on a regular grid.
 
         :param product: CALIOP data product ('L1', 'L2_VFM', ...)
-        :param version: CALIOP version product (ex: 'V4.10')
+        :param version: CALIOP version product, without the 'V' prefix (ex: '4.10')
         :param data_type: CALIOP data type (ex: 'Standard')
         :param granule: 'YYYY-MM-DDThh-mm-ssZx'
         :param grid: (optional) regular grid on which to put the data: '333m×30m', '1kmx60m', '5kmx60m', or '5kmx180m'
@@ -312,7 +312,7 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         self.filename = CAL_LID_FILENAME_FMT % (
             product,
             data_type,
-            version.replace(".", "-"),
+            f"V{version}".replace(".", "-"),
             granule,
         )
         if folderpath:
