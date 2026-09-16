@@ -281,7 +281,7 @@ def output_filename(request, result):
     version = f"V{request.output_version}".replace(".", "-")
     return (
         f"CAL_LID_L2_2D_McDA-{request.output_product_type}-{version}."
-        f"{request.granule_date}{suffix}.nc"
+        f"{request.granule}{suffix}.nc"
     )
 
 

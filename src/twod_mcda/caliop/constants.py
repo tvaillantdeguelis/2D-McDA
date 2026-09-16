@@ -1,6 +1,7 @@
 """Constants defined by CALIPSO/CALIOP products."""
 
 import pickle
+import re
 from pathlib import Path
 
 import numpy as np
@@ -80,19 +81,24 @@ LIDAR_ALTITUDES_FILE = (
 with LIDAR_ALTITUDES_FILE.open("rb") as file:
     LIDAR_DATA_ALTITUDES = pickle.load(file)["Lidar_Data_Altitudes"]
 
-CALIPSO_STRFTIME_FMT = "%Y-%m-%dT%H-%M-%S"
+GRANULE_TIME_FMT = "%Y-%m-%dT%H-%M-%S"
 
 CAL_LID_FILENAME_FMT = (
     "CAL_LID_%s-%s-%s.%s.hdf"  # product (ex: 'L2_VFM'), type (ex: Standard),
 )
 # version (ex: 'V4-10'),
-# granule date (ex: '2010-06-01T01-33-28ZN')
+# granule (ex: '2010-06-01T01-33-28ZN')
 
 CAL_IIR_FILENAME_FMT = (
     "CAL_IIR_%s-%s-%s.%s.hdf"  # product (ex: 'L2_Track'), type (ex: Standard),
 )
 # version (ex: 'V4-10'),
-# granule date (ex: '2010-06-01T01-33-28ZN')
+# granule (ex: '2010-06-01T01-33-28ZN')
+
+CAL_LID_L1_FILENAME_PATTERN = re.compile(
+    r"CAL_LID_L1-[^-]+-V(?:\d+)-(?:\d+)\."
+    r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})(Z[DN])\.hdf"
+)
 
 
 def get_caliop_correction_function(wl):

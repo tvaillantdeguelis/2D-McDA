@@ -3,16 +3,7 @@
 import os
 import socket
 
-
-def _granule_date_parts(granule_date):
-    """Return the calendar fields encoded in a CALIOP granule identifier."""
-
-    return {
-        "year": int(granule_date[:4]),
-        "month": int(granule_date[5:7]),
-        "day": int(granule_date[8:10]),
-    }
-
+from twod_mcda.caliop.granule import parse_granule_time
 
 # Get machine name
 hostname = socket.gethostname()
@@ -74,24 +65,24 @@ else:
     pass
 
 
-def get_caliop_data_tail_path(product, version, data_type, granule_date):
+def get_caliop_data_tail_path(product, version, data_type, granule):
     """
     Return tail path where the data product file is stored, according to the machine on which the
     script is runned.
 
     :param product: CALIOP data product ('L1', 'L2_VFM', ...)
     :param version: CALIOP version product (ex: 'V4.10')
-    :param granule_date: 'YYYY-MM-DDThh-mm-ssZx'
+    :param granule: 'YYYY-MM-DDThh-mm-ssZx'
     :return: tail path where the data product file is stored
     """
 
-    granule_date_dict = _granule_date_parts(granule_date)
+    granule_time = parse_granule_time(granule)
     if hostname[:5] == "icare":
         caliop_data_tail_path = CALIOP_DATA_TAIL_PATH_FMT[product].format(
             version=version.lower(),
-            year=granule_date_dict["year"],
-            month=granule_date_dict["month"],
-            day=granule_date_dict["day"],
+            year=granule_time.year,
+            month=granule_time.month,
+            day=granule_time.day,
         )
     elif hostname == "komputilo":
         caliop_data_tail_path = ""
@@ -99,13 +90,13 @@ def get_caliop_data_tail_path(product, version, data_type, granule_date):
         caliop_data_tail_path = CALIOP_DATA_TAIL_PATH_FMT[product].format(
             data_type=data_type,
             version=version.replace(".", "-"),
-            year=granule_date_dict["year"],
-            month=granule_date_dict["month"],
+            year=granule_time.year,
+            month=granule_time.month,
         )
     return caliop_data_tail_path
 
 
-def automatic_path_detection(product, version, data_type, granule_date):
+def automatic_path_detection(product, version, data_type, granule):
     """Resolve a product directory using legacy host-specific conventions."""
 
     if not CALIOP_DATA_HEAD_PATH:
@@ -118,6 +109,6 @@ def automatic_path_detection(product, version, data_type, granule_date):
         product,
         version,
         data_type,
-        granule_date,
+        granule,
     )
     return os.path.join(CALIOP_DATA_HEAD_PATH, tail_path)

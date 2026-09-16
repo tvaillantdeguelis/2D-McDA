@@ -22,10 +22,10 @@ def _load_context_profiles(request, previous_context_count, next_context_count):
 
     previous_profiles = None
     previous_granule_path = None
-    if previous_context_count and request.previous_granule_date is not None:
+    if previous_context_count and request.previous_granule is not None:
         previous_profiles, previous_granule_path = read_adjacent_profiles(
             request,
-            request.previous_granule_date,
+            request.previous_granule,
             request.previous_granule_directory,
             -previous_context_count,
             None,
@@ -33,10 +33,10 @@ def _load_context_profiles(request, previous_context_count, next_context_count):
 
     next_profiles = None
     next_granule_path = None
-    if next_context_count and request.next_granule_date is not None:
+    if next_context_count and request.next_granule is not None:
         next_profiles, next_granule_path = read_adjacent_profiles(
             request,
-            request.next_granule_date,
+            request.next_granule,
             request.next_granule_directory,
             None,
             next_context_count - 1,
@@ -45,19 +45,19 @@ def _load_context_profiles(request, previous_context_count, next_context_count):
     return previous_profiles, previous_granule_path, next_profiles, next_granule_path
 
 
-def prepare_granule(request, granule):
+def prepare_granule(request, granule_reader):
     """Plan the slices, load context profiles, and allocate the output datasets."""
 
     with timer("Plan profile slices and their overlapping context"):
         profile_starts, profile_ends, context_starts, context_ends = plan_slices(
-            granule.prof_min,
-            granule.prof_max,
+            granule_reader.prof_min,
+            granule_reader.prof_max,
             NB_PROF_SLICE,
             NB_PROF_CONTEXT,
         )
-        profile_count = granule.prof_max - granule.prof_min + 1
+        profile_count = granule_reader.prof_max - granule_reader.prof_min + 1
         slice_count = profile_starts.size
-        last_profile_in_file = granule.data_reader.nb_profiles - 1
+        last_profile_in_file = granule_reader.data_reader.nb_profiles - 1
         previous_context_count = max(0, -int(context_starts[0]))
         next_context_count = max(0, int(context_ends[-1]) - last_profile_in_file)
 
@@ -75,7 +75,7 @@ def prepare_granule(request, granule):
 
     print_processing_summary(
         request,
-        granule,
+        granule_reader,
         previous_granule_path,
         next_granule_path,
         profile_count,
@@ -85,11 +85,11 @@ def prepare_granule(request, granule):
     )
 
     with timer("Initialize whole-granule output datasets"):
-        altitude = granule.get_data("Lidar_Data_Altitudes")
+        altitude = granule_reader.get_data("Lidar_Data_Altitudes")
         granule_detection_product = empty_output(
             profile_count,
             altitude.values,
-            granule.prof_min,
+            granule_reader.prof_min,
         )
         granule_development_data = xr.Dataset(coords=granule_detection_product.coords)
 

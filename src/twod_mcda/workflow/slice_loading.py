@@ -22,12 +22,12 @@ def describe_slice(
     )
 
 
-def load_slice(profile_min, profile_max, granule, previous, following):
+def load_slice(profile_min, profile_max, granule_reader, previous, following):
     """Read one current-granule slice and add context at file edges."""
 
-    data = read_slice(granule, profile_min, profile_max)
+    data = read_slice(granule_reader, profile_min, profile_max)
     slice_data = SliceData(input=data)
-    granule_last_profile = granule.data_reader.nb_profiles - 1
+    granule_last_profile = granule_reader.data_reader.nb_profiles - 1
 
     if profile_min == 0 and previous is not None:
         first_time = data["Profile_Time"].isel(profile=0).item()

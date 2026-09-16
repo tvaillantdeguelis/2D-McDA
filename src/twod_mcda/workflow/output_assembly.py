@@ -141,13 +141,13 @@ def store_development(
         output[name].loc[{"profile": selected.coords["profile"]}] = selected
 
 
-def assemble_results(output, development, altitude, granule):
+def assemble_results(output, development, altitude, granule_reader):
     """Build the complete product payload from assembled slice outputs."""
 
     return ProcessingResult(
         data=output,
         development=development,
         altitude=altitude,
-        longitude_min=granule.lon_min,
-        longitude_max=granule.lon_max,
+        longitude_min=granule_reader.lon_min,
+        longitude_max=granule_reader.lon_max,
     )

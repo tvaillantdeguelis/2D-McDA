@@ -3,7 +3,7 @@
 
 def print_processing_summary(
     request,
-    current_granule,
+    current_granule_reader,
     previous_granule_path,
     next_granule_path,
     profile_count,
@@ -14,8 +14,8 @@ def print_processing_summary(
     """Print only the input and processing settings useful to the user."""
 
     if request.subset_active and request.subset_mode == "profindex":
-        subset_start = current_granule.prof_min
-        subset_end = current_granule.prof_max
+        subset_start = current_granule_reader.prof_min
+        subset_end = current_granule_reader.prof_max
         subset_limits_label = "Profile limits"
     elif request.subset_active:
         subset_start = request.subset_start
@@ -34,7 +34,7 @@ def print_processing_summary(
         print("Subset mode            : false")
     print("#################################################")
 
-    print(f"\n=> Current L1 file to process :\n{current_granule.filepath}")
+    print(f"\n=> Current L1 file to process :\n{current_granule_reader.filepath}")
 
     if previous_context_count:
         if previous_granule_path is None:

@@ -56,19 +56,6 @@ def UTC_time_CALIPSO(utc_time):
     return utc_time_string
 
 
-def granule_date_decomposition(granule_date):
-
-    year = int(granule_date[:4])
-    month = int(granule_date[5:7])
-    day = int(granule_date[8:10])
-    hour = int(granule_date[11:13])
-    minute = int(granule_date[14:16])
-    second = int(granule_date[17:19])
-    day_night_flag = granule_date[19:21]
-
-    return year, month, day, hour, minute, second, day_night_flag
-
-
 def lon_m180_180_to_0_360(lon_m180_180):
     """
     Transform list of longitudes from -180 to 180 to longitudes from 0 to 360
@@ -318,10 +305,3 @@ if __name__ == "__main__":
         lon_mono = get_monotical_lon(lon)
         for i in np.arange(lon.size):
             print(f"{lon[i]:+04d} {lon_mono[i]:+04d}")
-
-    if True:
-        granule_date = "2023-05-03T03-55-06ZN"
-        year, month, day, hour, minute, second, day_night_flag = (
-            granule_date_decomposition(granule_date)
-        )
-        print(year, month, day, hour, minute, second, day_night_flag)

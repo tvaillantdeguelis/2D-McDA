@@ -9,7 +9,7 @@ from twod_mcda.caliop.variables import CALIOP_L1_PROCESSING_VARIABLES
 
 def open_granule(
     request,
-    granule_date,
+    granule,
     directory,
     profile_start=None,
     profile_end=None,
@@ -21,7 +21,7 @@ def open_granule(
         product="L1",
         version=request.caliop_version,
         data_type=CALIOP_L1_PRODUCT_TYPE,
-        granule_date=granule_date,
+        granule=granule,
         grid="333mx30m",
         slice_start=profile_start,
         slice_end=profile_end,
@@ -31,10 +31,10 @@ def open_granule(
     )
 
 
-def read_slice(granule, profile_start, profile_end):
+def read_slice(granule_reader, profile_start, profile_end):
     """Read and derive the detector inputs for one profile slice."""
 
-    reader = granule.select_profiles(profile_start, profile_end)
+    reader = granule_reader.select_profiles(profile_start, profile_end)
     arrays = {
         variable: reader.get_data(variable)
         for variable in CALIOP_L1_PROCESSING_VARIABLES

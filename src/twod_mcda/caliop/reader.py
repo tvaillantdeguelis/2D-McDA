@@ -275,7 +275,7 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         product,
         version,
         data_type,
-        granule_date,
+        granule,
         grid="333mx30m",
         slice_start=None,
         slice_end=None,
@@ -289,7 +289,7 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         :param product: CALIOP data product ('L1', 'L2_VFM', ...)
         :param version: CALIOP version product (ex: 'V4.10')
         :param data_type: CALIOP data type (ex: 'Standard')
-        :param granule_date: 'YYYY-MM-DDThh-mm-ssZx'
+        :param granule: 'YYYY-MM-DDThh-mm-ssZx'
         :param grid: (optional) regular grid on which to put the data: '333m×30m', '1kmx60m', '5kmx60m', or '5kmx180m'
                      default: '333mx30m' (CALIOP full resolution)
         :param folderpath: (optional) data path, if not given then try automatic path detection
@@ -307,19 +307,19 @@ class CALIOPRegularGridReader(CALIOPDerivedVariablesMixin):
         self.data_type = data_type
         self.hgrid = grid.split("x")[0]
         self.vgrid = grid.split("x")[1]
-        self.granule_date = granule_date
+        self.granule = granule
         self.index30m_alt_max = index30m_alt_max
         self.filename = CAL_LID_FILENAME_FMT % (
             product,
             data_type,
             version.replace(".", "-"),
-            granule_date,
+            granule,
         )
         if folderpath:
             self.folderpath = folderpath
         else:  # automatic path detection
             self.folderpath = automatic_path_detection(
-                product, version, data_type, granule_date
+                product, version, data_type, granule
             )
         self.filepath = os.path.join(self.folderpath, self.filename)
         self._molecular_profiles = {

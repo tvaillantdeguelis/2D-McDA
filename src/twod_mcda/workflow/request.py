@@ -12,25 +12,25 @@ from twod_mcda.caliop.constants import (
 from twod_mcda.caliop.discovery import (
     find_granule_file,
     find_neighbor_granules,
-    parse_granule_time,
 )
+from twod_mcda.caliop.granule import parse_granule_time
 from twod_mcda.caliop.grids import alt_to_regular_30m_vertical_grid
 from twod_mcda.version import get_full_version
 from twod_mcda.workflow.models import ProcessingRequest
 
-_GRANULE_DATE_IN_FILENAME_PATTERN = re.compile(
+_GRANULE_IN_FILENAME_PATTERN = re.compile(
     r"\.(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z[DN])\.hdf$"
 )
 
 
-def _get_granule_date(file_path):
-    """Extract the granule date, including day/night, from a CALIOP file path."""
+def _get_granule(file_path):
+    """Extract the granule, including day/night, from a CALIOP file path."""
 
     if file_path is None:
         return None
 
     file_path = Path(file_path)
-    match = _GRANULE_DATE_IN_FILENAME_PATTERN.search(file_path.name)
+    match = _GRANULE_IN_FILENAME_PATTERN.search(file_path.name)
     if match is None:
         raise ValueError(f"Invalid CALIOP filename format: {file_path.name}")
 
@@ -100,21 +100,21 @@ def resolve_processing_request(cfg):
             f"{caliop_version!r}"
         )
     output_version = get_full_version().removeprefix("v")
-    granule_date = cfg["granule"]
-    granule_time = parse_granule_time(granule_date)
+    granule = cfg["granule"]
+    granule_time = parse_granule_time(granule)
     maximum_altitude_km = _resolve_max_altitude_km(
         processing_cfg.get("max_altitude_km", None)
     )
 
     return ProcessingRequest(
-        granule_date=granule_date,
+        granule=granule,
         caliop_version=caliop_version,
         current_granule_directory=Path(current_file).parent,
-        previous_granule_date=_get_granule_date(previous_file),
+        previous_granule=_get_granule(previous_file),
         previous_granule_directory=(
             Path(previous_file).parent if previous_file is not None else None
         ),
-        next_granule_date=_get_granule_date(next_file),
+        next_granule=_get_granule(next_file),
         next_granule_directory=(
             Path(next_file).parent if next_file is not None else None
         ),

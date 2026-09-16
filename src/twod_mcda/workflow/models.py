@@ -13,12 +13,12 @@ ArrayMapping = xr.Dataset
 class ProcessingRequest:
     """Resolved inputs and options for one CALIOP granule."""
 
-    granule_date: str
+    granule: str
     caliop_version: str
     current_granule_directory: Path
-    previous_granule_date: str | None
+    previous_granule: str | None
     previous_granule_directory: Path | None
-    next_granule_date: str | None
+    next_granule: str | None
     next_granule_directory: Path | None
     subset_active: bool
     subset_mode: str

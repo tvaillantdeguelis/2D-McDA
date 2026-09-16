@@ -6,23 +6,23 @@ from twod_mcda.caliop.input import open_granule, read_slice
 
 
 def read_adjacent_profiles(
-    request, granule_date, directory, profile_start, profile_end
+    request, granule, directory, profile_start, profile_end
 ):
     """Load context profiles from one adjacent granule, then close its file."""
 
     with open_granule(
         request,
-        granule_date,
+        granule,
         directory,
         profile_start,
         profile_end,
-    ) as adjacent_granule:
+    ) as adjacent_granule_reader:
         adjacent_profiles = read_slice(
-            adjacent_granule,
-            adjacent_granule.prof_min,
-            adjacent_granule.prof_max,
+            adjacent_granule_reader,
+            adjacent_granule_reader.prof_min,
+            adjacent_granule_reader.prof_max,
         )
-        adjacent_granule_path = adjacent_granule.filepath
+        adjacent_granule_path = adjacent_granule_reader.filepath
 
     return adjacent_profiles, adjacent_granule_path
 

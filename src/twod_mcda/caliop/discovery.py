@@ -2,39 +2,14 @@
 
 from datetime import datetime, timedelta
 from pathlib import Path
-import re
 
 from twod_mcda.caliop.constants import (
     CAL_LID_FILENAME_FMT,
+    CAL_LID_L1_FILENAME_PATTERN,
     CALIOP_L1_PRODUCT_TYPE,
-    CALIPSO_STRFTIME_FMT,
+    GRANULE_TIME_FMT,
 )
-
-GRANULE_PATTERN = re.compile(
-    r"CAL_LID_L1-[^-]+-V(?:\d+)-(?:\d+)\."
-    r"(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})(Z[DN])\.hdf"
-)
-
-
-def parse_granule_time(granule):
-    """
-    Parse a granule identifier into its observation datetime.
-
-    Parameters
-    ----------
-    granule : str
-        Granule identifier, e.g. "2013-01-11T03-25-54ZD".
-
-    Returns
-    -------
-    datetime
-        Observation start time.
-    """
-
-    return datetime.strptime(
-        granule[:-2],  # Remove the trailing 'ZD' or 'ZN'
-        CALIPSO_STRFTIME_FMT,
-    )
+from twod_mcda.caliop.granule import parse_granule_time
 
 
 def extract_granule_time(filename):
@@ -50,20 +25,20 @@ def extract_granule_time(filename):
         Observation start time extracted from filename.
     """
 
-    match = GRANULE_PATTERN.match(filename.name)
+    match = CAL_LID_L1_FILENAME_PATTERN.match(filename.name)
 
     if match is None:
         raise ValueError(f"Invalid CALIOP filename format: {filename.name}")
 
     return datetime.strptime(
         match.group(1),
-        CALIPSO_STRFTIME_FMT,
+        GRANULE_TIME_FMT,
     )
 
 
-def extract_granule_id(filename):
+def extract_granule(filename):
     """
-    Extract the full granule identifier, including the day/night flag,
+    Extract the full granule, including the day/night flag,
     from a CALIOP L1 filename.
 
     Example:
@@ -71,7 +46,7 @@ def extract_granule_id(filename):
         -> "2013-01-11T03-25-54ZD"
     """
 
-    match = GRANULE_PATTERN.match(filename.name)
+    match = CAL_LID_L1_FILENAME_PATTERN.match(filename.name)
 
     if match is None:
         raise ValueError(f"Invalid CALIOP filename format: {filename.name}")
@@ -118,7 +93,7 @@ def find_granule_file(cfg):
     Parameters
     ----------
     cfg : dict
-        Processing configuration, including the "granule" identifier,
+        Processing configuration, including the "granule",
         e.g. "2013-01-11T03-25-54ZD".
 
     Returns
@@ -164,7 +139,7 @@ def find_granules_between_dates(cfg, start_date, end_date):
     Returns
     -------
     list of str
-        CALIOP granule identifiers sorted chronologically.
+        CALIOP granules sorted chronologically.
     """
 
     files = []
@@ -196,7 +171,7 @@ def find_granules_between_dates(cfg, start_date, end_date):
         file for file in files if start_date <= extract_granule_time(file) <= end_date
     ]
 
-    return [extract_granule_id(file) for file in granule_files]
+    return [extract_granule(file) for file in granule_files]
 
 
 def find_neighbor_granules(cfg):
@@ -209,7 +184,7 @@ def find_neighbor_granules(cfg):
     Parameters
     ----------
     cfg : dict
-        Processing configuration, including the "granule" identifier,
+        Processing configuration, including the "granule",
         e.g. "2013-01-11T03-25-54ZD".
 
     Returns

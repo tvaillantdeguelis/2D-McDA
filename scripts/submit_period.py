@@ -56,7 +56,7 @@ def create_granule_config(cfg, granule):
     cfg : dict
         Base processing configuration.
     granule : str
-        CALIOP granule identifier.
+        CALIOP granule.
 
     Returns
     -------
