@@ -91,7 +91,7 @@ def load_slice(profile_min, profile_max, granule_reader, previous, following):
 
     data = read_slice(granule_reader, profile_min, profile_max)
     slice_data = SliceData(input=data)
-    granule_last_profile = granule_reader.data_reader.nb_profiles - 1
+    granule_last_profile = granule_reader.last_profile_in_file
 
     if profile_min == 0 and previous is not None:
         first_time = data["Profile_Time"].isel(profile=0).item()

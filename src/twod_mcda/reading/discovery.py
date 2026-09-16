@@ -11,6 +11,33 @@ from twod_mcda.caliop.constants import (
 )
 
 
+def caliop_l1_filename(granule, version):
+    """
+    Build the filename of one CALIOP L1 granule.
+
+    Parameters
+    ----------
+    granule : str
+        Granule, e.g. "2013-01-11T03-25-54ZD".
+
+    version : str
+        CALIOP product version, without its "V" prefix, e.g. "4.10".
+
+    Returns
+    -------
+    str
+        CALIOP L1 filename, e.g.
+        "CAL_LID_L1-Standard-V4-10.2013-01-11T03-25-54ZD.hdf".
+    """
+
+    return CAL_LID_FILENAME_FMT % (
+        "L1",
+        CALIOP_L1_PRODUCT_TYPE,
+        f"V{version}".replace(".", "-"),
+        granule,
+    )
+
+
 def parse_granule_time(granule):
     """
     Parse a granule into its observation datetime.
@@ -125,15 +152,7 @@ def find_granule_file(cfg):
     granule = cfg["granule"]
     folder = get_caliop_folder(cfg, parse_granule_time(granule))
 
-    cal_cfg = cfg["cal_lid_l1"]
-    version = f"V{cal_cfg['version']}".replace(".", "-")
-    filename = CAL_LID_FILENAME_FMT % (
-        "L1",
-        CALIOP_L1_PRODUCT_TYPE,
-        version,
-        granule,
-    )
-    file = folder / filename
+    file = folder / caliop_l1_filename(granule, cfg["cal_lid_l1"]["version"])
 
     if not file.exists():
         raise FileNotFoundError(f"CALIOP granule not found: {file}")
