@@ -32,18 +32,16 @@ def run_granule_pipeline(cfg):
     with timer("Resolve processing configuration and locate CALIOP files"):
         processing_request = resolve_processing_request(cfg)
 
+    # Opens the granule's HDF file and resolves its subset bounds, but does not
+    # load any scientific array yet (that happens per slice, in load_slice()).
     with timer("Open current CALIOP granule"):
-        current_granule_reader = open_granule(
-            processing_request,
-            processing_request.granule,
-            processing_request.current_granule_directory,
-            processing_request.subset_start,
-            processing_request.subset_end,
-            processing_request.subset_mode,
-        )
+        current_granule_reader = open_granule(processing_request)
 
     # This ``with`` guarantees that the HDF file closes, even after an error.
     with current_granule_reader as current_granule_reader:
+        # One-time setup for this granule, before the slice loop: plans the
+        # slices and their context, loads neighboring-granule context
+        # profiles, and allocates the empty whole-granule output datasets.
         preparation = prepare_granule(processing_request, current_granule_reader)
 
         planned_slices = zip(
@@ -74,6 +72,9 @@ def run_granule_pipeline(cfg):
 
             # ``timer`` only measures and prints the duration of this block.
             with timer(description):
+                # Reads this slice's profiles from the current granule, plus
+                # (at file edges only) context profiles from the neighboring
+                # granule, so the algorithm below never sees an artificial edge.
                 with timer("Load slice data"):
                     slice_data = load_slice(
                         first_profile_to_load,
