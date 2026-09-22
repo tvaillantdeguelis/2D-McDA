@@ -1,4 +1,4 @@
-"""Assemble whole-granule output datasets from per-slice results."""
+"""Allocate the output datasets of one run and fill them from per-slice results."""
 
 from dataclasses import dataclass
 
@@ -34,44 +34,73 @@ class ProcessingResult:
     longitude_max: float
 
 
-def empty_output(profile_count, altitude, profile_start=0):
+@dataclass
+class OutputDatasets:
+    """The output arrays the algorithm fills slice by slice.
+
+    They span only the profiles the run was asked to process, which may be a
+    subset of the granule: their ``profile`` coordinate starts at the first
+    requested profile. ``development`` holds the intermediate algorithm arrays
+    and stays empty unless they are saved; ``store_development`` creates its
+    variables on first use, since their step dimensions are known only once a
+    slice has been processed.
+    """
+
+    detection: xr.Dataset
+    development: xr.Dataset
+    altitude: xr.DataArray
+
+
+def empty_outputs(granule_reader):
+    """Allocate the output datasets covering the profiles to process."""
+
+    altitude = granule_reader.get_data("Lidar_Data_Altitudes")
+    detection = _empty_detection_output(
+        granule_reader.nb_profiles,
+        altitude.values,
+        granule_reader.prof_min,
+    )
+    return OutputDatasets(
+        detection=detection,
+        development=xr.Dataset(coords=detection.coords),
+        altitude=altitude,
+    )
+
+
+def _empty_detection_output(nb_profiles, altitude, profile_start=0):
     """Allocate an xarray product dataset with named coordinates."""
 
-    if np.isscalar(altitude):
-        altitude_values = np.arange(int(altitude))
-    else:
-        altitude_values = np.asarray(altitude)
     coords = {
-        "profile": np.arange(profile_start, profile_start + profile_count),
-        "altitude": altitude_values,
+        "profile": np.arange(profile_start, profile_start + nb_profiles),
+        "altitude": altitude,
     }
     profile_dims = ("profile",)
     grid_dims = ("profile", "altitude")
     return xr.Dataset(
         {
             "Profile_ID": xr.DataArray(
-                np.full(profile_count, int(FILL_VALUE_FLOAT), dtype=np.int32),
+                np.full(nb_profiles, int(FILL_VALUE_FLOAT), dtype=np.int32),
                 dims=profile_dims,
             ),
             "Profile_Time": xr.DataArray(
-                np.full(profile_count, FILL_VALUE_FLOAT, dtype=np.float64),
+                np.full(nb_profiles, FILL_VALUE_FLOAT, dtype=np.float64),
                 dims=profile_dims,
             ),
             "Profile_UTC_Time": xr.DataArray(
-                np.full(profile_count, FILL_VALUE_FLOAT, dtype=np.float64),
+                np.full(nb_profiles, FILL_VALUE_FLOAT, dtype=np.float64),
                 dims=profile_dims,
             ),
             "Latitude": xr.DataArray(
-                np.full(profile_count, FILL_VALUE_FLOAT, dtype=np.float32),
+                np.full(nb_profiles, FILL_VALUE_FLOAT, dtype=np.float32),
                 dims=profile_dims,
             ),
             "Longitude": xr.DataArray(
-                np.full(profile_count, FILL_VALUE_FLOAT, dtype=np.float32),
+                np.full(nb_profiles, FILL_VALUE_FLOAT, dtype=np.float32),
                 dims=profile_dims,
             ),
             **{
                 name: xr.DataArray(
-                    np.zeros((profile_count, altitude_values.size), dtype=np.uint8),
+                    np.zeros((nb_profiles, altitude.size), dtype=np.uint8),
                     dims=grid_dims,
                 )
                 for name in DETECTION_MASKS
@@ -81,22 +110,16 @@ def empty_output(profile_count, altitude, profile_start=0):
     )
 
 
-def store_slice(
-    output,
-    slice_data,
-    profile_min,
-    profile_max,
-    input_profile_min,
-    file_min,
-):
+def store_slice(output, slice_data, bounds, granule_reader):
     """Store only the result interval, excluding its processing context."""
 
-    file_max = file_min + output.sizes["profile"] - 1
-    expected_profiles = np.arange(file_min, file_max + 1)
+    output_min = granule_reader.prof_min
+    output_max = output_min + output.sizes["profile"] - 1
+    expected_profiles = np.arange(output_min, output_max + 1)
     if not np.array_equal(output.coords["profile"], expected_profiles):
         output.coords["profile"] = expected_profiles
-    copy_min = max(profile_min, file_min)
-    copy_max = min(profile_max, file_max)
+    copy_min = max(bounds.profile_min, output_min)
+    copy_max = min(bounds.profile_max, output_max)
     if copy_min > copy_max:
         return
 
@@ -113,28 +136,18 @@ def store_slice(
         )
 
 
-def store_development(
-    output,
-    slice_development,
-    profile_min,
-    profile_max,
-    input_profile_min,
-    file_min,
-    profile_count,
-):
+def store_development(output, slice_development, bounds, granule_reader):
     """Store development data without the processing context."""
 
-    file_max = file_min + profile_count - 1
-    copy_min = max(profile_min, file_min)
-    copy_max = min(profile_max, file_max)
+    output_min = granule_reader.prof_min
+    output_max = output_min + granule_reader.nb_profiles - 1
+    copy_min = max(bounds.profile_min, output_min)
+    copy_max = min(bounds.profile_max, output_max)
     if copy_min > copy_max:
         return
 
     if "profile" not in output.coords:
-        output.coords["profile"] = np.arange(
-            file_min,
-            file_min + profile_count,
-        )
+        output.coords["profile"] = np.arange(output_min, output_max + 1)
 
     for name, values in slice_development.items():
         if "profile" not in values.dims:
@@ -153,13 +166,13 @@ def store_development(
         output[name].loc[{"profile": selected.coords["profile"]}] = selected
 
 
-def assemble_results(output, development, altitude, granule_reader):
+def assemble_results(outputs, granule_reader):
     """Build the complete product payload from assembled slice outputs."""
 
     return ProcessingResult(
-        data=output,
-        development=development,
-        altitude=altitude,
+        data=outputs.detection,
+        development=outputs.development,
+        altitude=outputs.altitude,
         longitude_min=granule_reader.lon_min,
         longitude_max=granule_reader.lon_max,
     )

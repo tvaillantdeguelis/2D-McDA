@@ -8,11 +8,12 @@ run, so only the requested profiles reach the output product.
 """
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import xarray as xr
 
-from twod_mcda.reading.access import read_slice
+from twod_mcda.reading.access import read_adjacent_profiles, read_slice
 
 
 @dataclass
@@ -22,29 +23,57 @@ class SliceData:
     input: xr.Dataset
     masks: xr.Dataset = field(default_factory=xr.Dataset)
     development: xr.Dataset = field(default_factory=xr.Dataset)
-    previous_context_count: int = 0
-    next_context_count: int = 0
+    nb_profiles_previous_context: int = 0
+    nb_profiles_next_context: int = 0
 
 
-def plan_slices(
-    profile_min,
-    profile_max,
-    slice_size,
-    context_size,
-):
+@dataclass(frozen=True)
+class SliceBounds:
+    """Profile bounds of one processing slice.
+
+    ``profile_min`` and ``profile_max`` delimit the profiles retained in the
+    output. ``context_min`` and ``context_max`` widen them with the processing
+    context, and are intentionally not clipped: a negative index or an index
+    beyond the current granule identifies context that must come from an
+    adjacent granule. ``first_profile_to_load`` and ``last_profile_to_load``
+    are the same bounds clipped to the current granule file, so they are what
+    ``load_slice`` reads from it.
     """
-    Compute result slices and the context required to process each one.
 
-    Context bounds are intentionally not clipped to a granule: negative
-    indexes and indexes beyond the current granule identify data that must be
-    read from adjacent granules.
+    profile_min: int
+    profile_max: int
+    context_min: int
+    context_max: int
+    first_profile_to_load: int
+    last_profile_to_load: int
+
+
+@dataclass(frozen=True)
+class AdjacentContext:
+    """Context profiles read from the granules adjacent to the current one.
+
+    Each side is ``None`` when the slices need no context there, or when the
+    adjacent granule was not found. The two counts are how many profiles were
+    asked of each neighbor, which stays meaningful even when the granule is
+    missing. The paths are kept only to report which files provided the context.
+    """
+
+    previous_profiles: xr.Dataset | None
+    next_profiles: xr.Dataset | None
+    previous_granule_path: Path | None
+    next_granule_path: Path | None
+    nb_profiles_previous_context: int
+    nb_profiles_next_context: int
+
+
+def plan_slices(granule_reader, slice_size, context_size):
+    """
+    Split the profiles to process into slices and resolve the context of each one.
 
     Parameters
     ----------
-    profile_min : int
-        First requested profile index.
-    profile_max : int
-        Last requested profile index.
+    granule_reader : reading.reader.CALIOPRegularGridReader
+        Reader of the granule to process, holding the requested profile range.
     slice_size : int
         Maximum distance between the inclusive result bounds of one slice.
     context_size : int
@@ -52,48 +81,105 @@ def plan_slices(
 
     Returns
     -------
-    profile_starts, profile_ends : numpy.ndarray
-        Inclusive bounds of the profiles retained from each slice.
-    context_starts, context_ends : numpy.ndarray
-        Inclusive input bounds used to process each slice.
+    tuple of SliceBounds
+        The slices to process, in processing order.
     """
 
     profile_starts = np.arange(
-        profile_min,
-        profile_max,
+        granule_reader.prof_min,
+        granule_reader.prof_max,
         slice_size,
         dtype=int,
     )
-    if profile_starts.size == 0:
-        profile_starts = np.array([profile_min], dtype=int)
-
-    profile_ends = np.minimum(profile_starts + slice_size, profile_max)
+    profile_ends = np.minimum(profile_starts + slice_size, granule_reader.prof_max)
     context_starts = profile_starts - context_size
     context_ends = profile_ends + context_size
 
-    return profile_starts, profile_ends, context_starts, context_ends
-
-
-def describe_slice(
-    index, slice_count, profile_min, profile_max, context_min, context_max
-):
-    """Describe both the retained profiles and the full algorithm input."""
-
-    return (
-        f"Process slice {index:d}/{slice_count:d} "
-        f"(profiles {profile_min:d} to {profile_max:d} using slice "
-        f"{context_min:d} to {context_max:d})"
+    last_profile_in_file = granule_reader.last_profile_in_file
+    planned_slices = zip(profile_starts, profile_ends, context_starts, context_ends)
+    return tuple(
+        SliceBounds(
+            profile_min=int(profile_min),
+            profile_max=int(profile_max),
+            context_min=int(context_min),
+            context_max=int(context_max),
+            first_profile_to_load=max(int(context_min), 0),
+            last_profile_to_load=min(int(context_max), last_profile_in_file),
+        )
+        for profile_min, profile_max, context_min, context_max in planned_slices
     )
 
 
-def load_slice(profile_min, profile_max, granule_reader, previous, following):
+def _read_context_profiles(request, granule, directory, nb_profiles_context, side):
+    """Read the context profiles one adjacent granule provides, if it exists."""
+
+    if not nb_profiles_context or granule is None:
+        return None, None
+
+    # The previous granule provides its last profiles, the next one its first.
+    profile_start = -nb_profiles_context if side == "start" else None
+    profile_end = None if side == "start" else nb_profiles_context - 1
+    return read_adjacent_profiles(
+        request,
+        granule,
+        directory,
+        profile_start,
+        profile_end,
+    )
+
+
+def load_adjacent_context(request, slices):
+    """Read from the adjacent granules the context profiles the slices expect.
+
+    The context each neighbor must provide is the part of the first and last
+    slice that was clipped away when their bounds were restricted to the
+    current granule file.
+    """
+
+    nb_profiles_previous_context = (
+        slices[0].first_profile_to_load - slices[0].context_min
+    )
+    nb_profiles_next_context = slices[-1].context_max - slices[-1].last_profile_to_load
+
+    previous_profiles, previous_granule_path = _read_context_profiles(
+        request,
+        request.previous_granule,
+        request.previous_granule_directory,
+        nb_profiles_previous_context,
+        "start",
+    )
+    next_profiles, next_granule_path = _read_context_profiles(
+        request,
+        request.next_granule,
+        request.next_granule_directory,
+        nb_profiles_next_context,
+        "end",
+    )
+
+    return AdjacentContext(
+        previous_profiles=previous_profiles,
+        next_profiles=next_profiles,
+        previous_granule_path=previous_granule_path,
+        next_granule_path=next_granule_path,
+        nb_profiles_previous_context=nb_profiles_previous_context,
+        nb_profiles_next_context=nb_profiles_next_context,
+    )
+
+
+def load_slice(bounds, granule_reader, adjacent_context):
     """Read one current-granule slice and add context at file edges."""
 
-    data = read_slice(granule_reader, profile_min, profile_max)
+    data = read_slice(
+        granule_reader,
+        bounds.first_profile_to_load,
+        bounds.last_profile_to_load,
+    )
     slice_data = SliceData(input=data)
     granule_last_profile = granule_reader.last_profile_in_file
+    previous = adjacent_context.previous_profiles
+    following = adjacent_context.next_profiles
 
-    if profile_min == 0 and previous is not None:
+    if bounds.first_profile_to_load == 0 and previous is not None:
         first_time = data["Profile_Time"].isel(profile=0).item()
         previous_time = previous["Profile_Time"].isel(profile=-1).item()
         time_gap = np.abs(first_time - previous_time)
@@ -104,14 +190,14 @@ def load_slice(profile_min, profile_max, granule_reader, previous, following):
         if profiles_are_consecutive(previous_time, first_time):
             print("\tAppend previous granule")
             slice_data.input = append_adjacent_profiles(data, previous, "start")
-            slice_data.previous_context_count = previous.sizes["profile"]
+            slice_data.nb_profiles_previous_context = previous.sizes["profile"]
         else:
             print(
                 "\tPrevious granule does not seem consecutive. "
                 "No start context added."
             )
 
-    if profile_max == granule_last_profile and following is not None:
+    if bounds.last_profile_to_load == granule_last_profile and following is not None:
         following_time = following["Profile_Time"].isel(profile=0).item()
         last_time = data["Profile_Time"].isel(profile=-1).item()
         time_gap = np.abs(following_time - last_time)
@@ -126,7 +212,7 @@ def load_slice(profile_min, profile_max, granule_reader, previous, following):
                 following,
                 "end",
             )
-            slice_data.next_context_count = following.sizes["profile"]
+            slice_data.nb_profiles_next_context = following.sizes["profile"]
         else:
             print("\tNext granule does not seem consecutive. No end context added.")
 
@@ -161,24 +247,24 @@ def trim_slice_context(slice_data):
     """Remove the neighboring-granule context added on either side of a slice."""
 
     context_by_side = (
-        ("start", slice_data.previous_context_count),
-        ("end", slice_data.next_context_count),
+        ("start", slice_data.nb_profiles_previous_context),
+        ("end", slice_data.nb_profiles_next_context),
     )
 
-    for side, profile_count in context_by_side:
-        if profile_count == 0:
+    for side, nb_profiles_context in context_by_side:
+        if nb_profiles_context == 0:
             continue
         print(f"\n\n*****Remove context from {side} adjacent file...*****")
-        slice_data.input = trim_profiles(slice_data.input, profile_count, side)
-        slice_data.masks = trim_profiles(slice_data.masks, profile_count, side)
+        slice_data.input = trim_profiles(slice_data.input, nb_profiles_context, side)
+        slice_data.masks = trim_profiles(slice_data.masks, nb_profiles_context, side)
         slice_data.development = trim_profiles(
             slice_data.development,
-            profile_count,
+            nb_profiles_context,
             side,
         )
 
 
-def trim_profiles(array, profile_count, side):
+def trim_profiles(array, nb_profiles_context, side):
     """
     Remove profiles added from an adjacent granule.
 
@@ -186,7 +272,7 @@ def trim_profiles(array, profile_count, side):
     ----------
     array : xarray.DataArray or xarray.Dataset
         Labelled object containing a ``profile`` dimension.
-    profile_count : int
+    nb_profiles_context : int
         Number of profiles to remove.
     side : {"start", "end"}
         Side from which profiles are removed.
@@ -204,9 +290,9 @@ def trim_profiles(array, profile_count, side):
         if "profile" not in array.dims:
             return array
         indexer = (
-            slice(profile_count, None)
+            slice(nb_profiles_context, None)
             if side == "start"
-            else slice(None, -profile_count)
+            else slice(None, -nb_profiles_context)
         )
         return array.isel(profile=indexer)
 
@@ -222,8 +308,8 @@ def trim_profiles(array, profile_count, side):
     slices = [slice(None)] * array.ndim
 
     if side == "start":
-        slices[profile_axis] = slice(profile_count, None)
+        slices[profile_axis] = slice(nb_profiles_context, None)
     else:
-        slices[profile_axis] = slice(None, -profile_count)
+        slices[profile_axis] = slice(None, -nb_profiles_context)
 
     return array[tuple(slices)]
