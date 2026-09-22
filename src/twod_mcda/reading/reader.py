@@ -186,8 +186,6 @@ class CALIOPRegularGridReader:
         self.granule_file = granule_file
         self.max_altitude_index = max_altitude_index
 
-        # int() matters: the longitude lookup returns NumPy integers, which the
-        # underlying file reader cannot use as hyperslab bounds.
         self.prof_min = int(profile_start)
         self.prof_max = int(profile_end)
         self.nb_profiles = self.prof_max - self.prof_min + 1

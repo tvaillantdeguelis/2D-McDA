@@ -94,8 +94,8 @@ class CALIOPGranuleFile:
 
         dims = tuple(DIMENSION_NAMES.get(dim, dim.lower()) for dim in array.dims)
         coords = {}
-        if "profile" in dims:
-            profile_size = array.shape[dims.index("profile")]
+        if PROFILE_DIMENSION in array.dims:
+            profile_size = array.sizes[PROFILE_DIMENSION]
             coords["profile"] = np.arange(
                 profile_start,
                 profile_start + profile_size,

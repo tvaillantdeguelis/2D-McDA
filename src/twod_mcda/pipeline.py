@@ -1,7 +1,8 @@
 """Top-level processing pipeline.
 
 ``run_granule_pipeline`` is the entry point. It locates and opens one CALIOP
-granule, prepares it for processing (see ``preparation``), then
+granule, sets up the three things the algorithm needs (the profile slices, the
+context profiles of the adjacent granules, and the empty output datasets), then
 applies the 2D-McDA scientific algorithm slice by slice.
 
 The result is written to a netCDF product at the end.
@@ -14,11 +15,22 @@ from .algorithm.composite import merged_feature_masks
 from .algorithm.features import detect_features_in_3_channels
 from .algorithm.surface import detect_surface_in_3_channels
 from .config import resolve_processing_request
-from .output.assembly import assemble_results, store_development, store_slice
+from .output.assembly import (
+    assemble_results,
+    empty_outputs,
+    store_development,
+    store_slice,
+)
 from .output.product import write_product
-from .preparation import prepare_granule
+from .parameters import NB_PROF_CONTEXT, NB_PROF_SLICE
 from .reading.access import open_granule
-from .slicing import describe_slice, load_slice, trim_slice_context
+from .slicing import (
+    load_adjacent_context,
+    load_slice,
+    plan_slices,
+    trim_slice_context,
+)
+from .utils.reporting import print_processing_summary
 from .utils.timing import timer
 
 
@@ -39,49 +51,45 @@ def run_granule_pipeline(cfg):
 
     # This ``with`` guarantees that the HDF file closes, even after an error.
     with current_granule_reader as current_granule_reader:
-        # One-time setup for this granule, before the slice loop: plans the
-        # slices and their context, loads neighboring-granule context
-        # profiles, and allocates the empty whole-granule output datasets.
-        preparation = prepare_granule(processing_request, current_granule_reader)
+        # -----------------------------------------------------------------
+        # One-time setup for this granule, before the slice loop.
+        # -----------------------------------------------------------------
+        with timer("Plan profile slices and their overlapping context"):
+            slices = plan_slices(
+                current_granule_reader,
+                NB_PROF_SLICE,
+                NB_PROF_CONTEXT,
+            )
 
-        planned_slices = zip(
-            preparation.profile_starts,
-            preparation.profile_ends,
-            preparation.context_starts,
-            preparation.context_ends,
+        with timer("Load neighboring granule context profiles"):
+            adjacent_context = load_adjacent_context(processing_request, slices)
+
+        print_processing_summary(
+            processing_request,
+            current_granule_reader,
+            slices,
+            adjacent_context,
         )
-        for slice_index, (
-            profile_min,
-            profile_max,
-            context_min,
-            context_max,
-        ) in enumerate(planned_slices, start=1):
-            first_profile_to_load = max(int(context_min), 0)
-            last_profile_to_load = min(
-                int(context_max),
-                preparation.last_profile_in_file,
-            )
-            description = describe_slice(
-                slice_index,
-                preparation.slice_count,
-                profile_min,
-                profile_max,
-                context_min,
-                context_max,
-            )
 
+        with timer("Initialize the output datasets"):
+            outputs = empty_outputs(current_granule_reader)
+        # -----------------------------------------------------------------
+
+        for index, bounds in enumerate(slices, start=1):
             # ``timer`` only measures and prints the duration of this block.
-            with timer(description):
+            with timer(
+                f"Process slice {index:d}/{len(slices):d} "
+                f"(profiles {bounds.profile_min:d} to {bounds.profile_max:d} "
+                f"using slice {bounds.context_min:d} to {bounds.context_max:d})"
+            ):
                 # Reads this slice's profiles from the current granule, plus
                 # (at file edges only) context profiles from the neighboring
                 # granule, so the algorithm below never sees an artificial edge.
                 with timer("Load slice data"):
                     slice_data = load_slice(
-                        first_profile_to_load,
-                        last_profile_to_load,
+                        bounds,
                         current_granule_reader,
-                        preparation.previous_profiles,
-                        preparation.next_profiles,
+                        adjacent_context,
                     )
 
                 # ---------------------------------------------------------
@@ -108,33 +116,23 @@ def run_granule_pipeline(cfg):
                     )
                 # ---------------------------------------------------------
 
-                with timer("Copy slice results to whole-granule datasets"):
+                with timer("Copy slice results to the output datasets"):
                     if processing_request.save_development_data:
                         store_development(
-                            preparation.granule_development_data,
+                            outputs.development,
                             slice_data.development,
-                            profile_min,
-                            profile_max,
-                            first_profile_to_load,
-                            current_granule_reader.prof_min,
-                            preparation.profile_count,
+                            bounds,
+                            current_granule_reader,
                         )
                     store_slice(
-                        preparation.granule_detection_product,
+                        outputs.detection,
                         slice_data,
-                        profile_min,
-                        profile_max,
-                        first_profile_to_load,
-                        current_granule_reader.prof_min,
+                        bounds,
+                        current_granule_reader,
                     )
 
         with timer("Assemble arrays and metadata for the NetCDF product"):
-            product_to_write = assemble_results(
-                preparation.granule_detection_product,
-                preparation.granule_development_data,
-                preparation.altitude,
-                current_granule_reader,
-            )
+            product_to_write = assemble_results(outputs, current_granule_reader)
 
     print(
         "\n\n############################################################"

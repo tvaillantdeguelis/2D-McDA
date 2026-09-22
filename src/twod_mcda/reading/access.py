@@ -85,29 +85,36 @@ def _resolve_profile_bounds(granule_file, profile_start, profile_end, subset_mod
 
     if subset_mode == "longitude":
         longitude = granule_file.get_data("Longitude")
-        return get_prof_min_max_indexes_from_lon(
+        prof_min, prof_max = get_prof_min_max_indexes_from_lon(
             longitude,
             profile_start,
             profile_end,
         )
+    elif subset_mode == "profindex":
+        if profile_start is None:
+            prof_min = 0
+        else:
+            prof_min = int(profile_start)
+            if prof_min < 0:
+                prof_min += granule_file.nb_profiles
 
-    if subset_mode != "profindex":
+        if profile_end is None:
+            prof_max = granule_file.nb_profiles - 1
+        else:
+            prof_max = int(profile_end)
+            if prof_max < 0:
+                prof_max += granule_file.nb_profiles
+    else:
         raise ValueError(
             f"Error: subset_mode = '{subset_mode}' is not defined. "
             "Please use 'profindex' or 'longitude'\n"
         )
 
-    if profile_start is None:
-        prof_min = 0
-    else:
-        prof_min = int(profile_start)
-        if prof_min < 0:
-            prof_min += granule_file.nb_profiles
-
-    if profile_end is None:
-        prof_max = granule_file.nb_profiles - 1
-    else:
-        prof_max = int(profile_end)
+    if prof_max <= prof_min:
+        raise ValueError(
+            f"prof_max (= {prof_max}) <= prof_min (= {prof_min}); "
+            "please check profile_start and profile_end"
+        )
 
     return prof_min, prof_max
 
