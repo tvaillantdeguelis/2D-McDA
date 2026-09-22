@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.8.0] - 2026-09-22
+
+### Changed
+
+- Removed the `preparation` module and folded slice planning, context loading, and output allocation into `slicing` and `pipeline`.
+
 ## [2.7.0] - 2026-09-16
 
 ### Changed
@@ -246,6 +252,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.8.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.5.4...v2.6.0
 [2.5.4]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.5.3...v2.5.4
