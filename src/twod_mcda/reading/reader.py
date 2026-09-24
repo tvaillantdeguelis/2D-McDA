@@ -21,7 +21,7 @@ from twod_mcda.caliop.grids import (
     shape_to_regular_30m_vertical_grid,
 )
 from twod_mcda.reading.derived import DerivedVariables
-from twod_mcda.utils.arrays import as_masked_array
+from twod_mcda.utils.arrays import mask_invalid
 
 
 def _molecular_attenuated_backscatter(derived, wavelength, polarization, do_fillvalue):
@@ -270,31 +270,28 @@ class CALIOPRegularGridReader:
         else:
             raise KeyError(f"Error: unknown key = {key}.\n")
 
-        attributes = data.attrs.copy() if isinstance(data, xr.DataArray) else {}
-        if isinstance(data, xr.DataArray):
-            data = as_masked_array(data) if do_fillvalue else data.values
+        attributes = data.attrs.copy()
+        if do_fillvalue:
+            data = mask_invalid(data)
 
         # Put on the regular 30 m vertical grid, truncated at the requested altitude
         vertical_dimension = None
         if key == "Lidar_Data_Altitudes":
             if data.size == NUMBER_OF_VERTICAL_BINS:
-                data = alt_to_regular_30m_vertical_grid(data)
+                data = alt_to_regular_30m_vertical_grid(data.values)
                 data = data[: self.max_altitude_index]
         elif data.ndim == 1:
             # No vertical averaging for 1D data
             pass
         elif data.ndim == 2:
             if data.shape[1] == NUMBER_OF_VERTICAL_BINS:
-                data = shape_to_regular_30m_vertical_grid(data)
-                data = data[:, : self.max_altitude_index]
+                data = self._to_regular_grid(data)
                 vertical_dimension = "altitude"
             elif data.shape[1] == NUMBER_OF_VERTICAL_BINS_MET:
                 vertical_dimension = "met_altitude"
                 if key == "Temperature":
                     derived = self._derived_variables(profile_start, profile_end)
-                    data = derived.interp_temperature(data, do_fillvalue)
-                    data = shape_to_regular_30m_vertical_grid(data)
-                    data = data[:, : self.max_altitude_index]
+                    data = self._to_regular_grid(derived.interp_temperature(do_fillvalue))
                     vertical_dimension = "altitude"
         else:
             raise ValueError(f"Error: key = {key} with ndim ≥ 3 not implemented yet.\n")
@@ -306,6 +303,13 @@ class CALIOPRegularGridReader:
             profile_start,
             attributes,
         )
+
+    def _to_regular_grid(self, data):
+        """Put (profile, native bin) data on the regular 30 m grid, truncated."""
+
+        vertical_dim = data.dims[1]
+        data = shape_to_regular_30m_vertical_grid(data, dim=vertical_dim)
+        return data.isel({vertical_dim: slice(None, self.max_altitude_index)})
 
     def _as_dataarray(
         self,

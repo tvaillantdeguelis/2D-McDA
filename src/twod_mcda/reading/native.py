@@ -17,7 +17,11 @@ from pathlib import Path
 import numpy as np
 import xarray as xr
 
-from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
+from twod_mcda.caliop.constants import (
+    FILL_VALUE_FLOAT,
+    LIDAR_ALTITUDE_DIMENSION,
+    MET_ALTITUDE_DIMENSION,
+)
 
 #: Dimension carrying the profiles of a granule, as named in the file.
 PROFILE_DIMENSION = "Record_Number"
@@ -26,8 +30,8 @@ PROFILE_DIMENSION = "Record_Number"
 #: dimension keeps its own name, lowercased.
 DIMENSION_NAMES = {
     PROFILE_DIMENSION: "profile",
-    "Lidar_Data_Altitudes": "lidar_altitude",
-    "Met_Data_Altitudes": "met_altitude",
+    "Lidar_Data_Altitudes": LIDAR_ALTITUDE_DIMENSION,
+    "Met_Data_Altitudes": MET_ALTITUDE_DIMENSION,
 }
 
 #: Vertical grids read in double precision: the regular 30 m grid is

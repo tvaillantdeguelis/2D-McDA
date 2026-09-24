@@ -21,6 +21,10 @@ IGBP_FLAG_WATER = 17
 
 NUMBER_OF_VERTICAL_BINS = 583
 NUMBER_OF_VERTICAL_BINS_MET = 33
+
+#: Names of the two native vertical dimensions, as labelled by the reading stack
+LIDAR_ALTITUDE_DIMENSION = "lidar_altitude"
+MET_ALTITUDE_DIMENSION = "met_altitude"
 NUMBER_OF_VERTICAL_BINS_05KMPRO = 399
 
 REGION_5_ALTITUDE_BOUNDARIES = (40.0, 30.1)

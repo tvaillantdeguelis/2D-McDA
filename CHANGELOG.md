@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.9.0] - 2026-09-24
+
+### Changed
+
+- The reading stack (`reading`, `caliop`) works on xarray DataArrays with NaN for missing values instead of NumPy masked arrays.
+
+### Fixed
+
+- Fixed the temperature interpolation, which shifted the surface level of every profile following one with no valid temperature.
+
 ## [2.8.0] - 2026-09-22
 
 ### Changed
@@ -252,6 +262,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.9.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.5.4...v2.6.0
