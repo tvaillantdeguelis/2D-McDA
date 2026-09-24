@@ -4,9 +4,12 @@ These are the variables CALIOP does not store: the parallel 532 nm backscatter,
 the molecular model, and the noise terms. They are all computed from native
 Level 1 variables read over one profile range, which is why this object is built
 from a reader and its bounds rather than mixed into the reader itself.
+
+Every variable is returned as a labelled DataArray, with NaN where missing.
 """
 
 import numpy as np
+import xarray as xr
 from scipy.interpolate import interp1d
 
 from twod_mcda.caliop.physics import (
@@ -20,8 +23,8 @@ from twod_mcda.caliop.physics import (
     range_from_altitude,
     rms_from_P_domain_to_betap_domain,
 )
-from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
-from twod_mcda.utils.arrays import as_masked_array
+from twod_mcda.caliop.constants import FILL_VALUE_FLOAT, MET_ALTITUDE_DIMENSION
+from twod_mcda.utils.arrays import mask_invalid
 
 
 class DerivedVariables:
@@ -42,175 +45,157 @@ class DerivedVariables:
             "1064": None,
         }
 
-    def _native_values(self, key, do_fillvalue):
+    def _native_data(self, key, do_fillvalue):
+        """Return a native variable as a labelled DataArray, NaN where missing."""
+
         data = self.granule_file.get_data(
             key,
             self.prof_min,
             self.prof_max,
             do_fillvalue,
         )
-        return as_masked_array(data) if do_fillvalue else data.values
+        return mask_invalid(data) if do_fillvalue else data
 
     def par_ab532(self, do_fillvalue):
-        tot_ab_532 = self._native_values(
-            "Total_Attenuated_Backscatter_532", do_fillvalue
-        )
-        per_ab_532 = self._native_values(
+        tot_ab_532 = self._native_data("Total_Attenuated_Backscatter_532", do_fillvalue)
+        per_ab_532 = self._native_data(
             "Perpendicular_Attenuated_Backscatter_532", do_fillvalue
         )
-        par_ab_532 = compute_par_ab532(tot_ab_532, per_ab_532)
-        return par_ab_532
+        # xarray arithmetic keeps the attributes of its first operand, which
+        # describe the total backscatter, not this derived variable
+        return compute_par_ab532(tot_ab_532, per_ab_532).drop_attrs()
 
     def molecular_profiles(self, wl, polar, do_fillvalue):
-        mol_nd = self._native_values("Molecular_Number_Density", do_fillvalue)
-        O3_nd = self._native_values("Ozone_Number_Density", do_fillvalue)
-        alt = self._native_values("Lidar_Data_Altitudes", do_fillvalue)
-        met_alt = self._native_values("Met_Data_Altitudes", do_fillvalue)
-        if self._molecular_profiles[str(wl) + polar] is None:
-            self._molecular_profiles[str(wl) + polar] = compute_ab_mol_and_b_mol(
-                mol_nd, O3_nd, alt, met_alt, wl, polar
+        channel = str(wl) + polar
+        if self._molecular_profiles[channel] is None:
+            self._molecular_profiles[channel] = compute_ab_mol_and_b_mol(
+                self._native_data("Molecular_Number_Density", do_fillvalue),
+                self._native_data("Ozone_Number_Density", do_fillvalue),
+                self._native_data("Lidar_Data_Altitudes", do_fillvalue),
+                self._native_data("Met_Data_Altitudes", do_fillvalue),
+                wl,
+                polar,
             )
-        return self._molecular_profiles[str(wl) + polar]
+        return self._molecular_profiles[channel]
+
+    def _range(self, do_fillvalue):
+        """Return the range from the spacecraft to every lidar altitude bin."""
+
+        # Named dimensions broadcast (profile) against (lidar_altitude) into
+        # (profile, lidar_altitude)
+        return range_from_altitude(
+            self._native_data("Spacecraft_Altitude", do_fillvalue),
+            self._native_data("Lidar_Data_Altitudes", do_fillvalue),
+            self._native_data("Off_Nadir_Angle", do_fillvalue),
+        )
 
     def nsf_in_ab_domain(self, wl, polar, do_fillvalue):
-        sat_alt = self._native_values("Spacecraft_Altitude", do_fillvalue)[
-            :, np.newaxis
-        ]
-        caliop_lidar_tilt = self._native_values("Off_Nadir_Angle", do_fillvalue)[
-            :, np.newaxis
-        ]
-        data_alt = self._native_values("Lidar_Data_Altitudes", do_fillvalue)[
-            np.newaxis, :
-        ]
-        range_alt = range_from_altitude(sat_alt, data_alt, caliop_lidar_tilt)
+        range_alt = self._range(do_fillvalue)
         pgr = np.array((1,))
         if wl == 532:
-            calibration_cst = self._native_values(
-                "Calibration_Constant_532", do_fillvalue
-            )[:, np.newaxis]
-            laser_energy = self._native_values("Laser_Energy_532", do_fillvalue)[
-                :, np.newaxis
-            ]
+            calibration_cst = self._native_data("Calibration_Constant_532", do_fillvalue)
+            laser_energy = self._native_data("Laser_Energy_532", do_fillvalue)
             if polar == "par":
-                nsf = self._native_values(
-                    "Noise_Scale_Factor_532_Parallel", do_fillvalue
-                )[:, np.newaxis]
+                nsf = self._native_data("Noise_Scale_Factor_532_Parallel", do_fillvalue)
             if polar == "per":
-                nsf = self._native_values(
+                nsf = self._native_data(
                     "Noise_Scale_Factor_532_Perpendicular", do_fillvalue
-                )[:, np.newaxis]
-                pgr = self._native_values(
-                    "Depolarization_Gain_Ratio_532", do_fillvalue
-                )[:, np.newaxis]
+                )
+                pgr = self._native_data("Depolarization_Gain_Ratio_532", do_fillvalue)
         elif wl == 1064:
-            calibration_cst = self._native_values(
+            calibration_cst = self._native_data(
                 "Calibration_Constant_1064", do_fillvalue
-            )[:, np.newaxis]
-            laser_energy = self._native_values("Laser_Energy_1064", do_fillvalue)[
-                :, np.newaxis
-            ]
-            nsf = self._native_values("Noise_Scale_Factor_1064", do_fillvalue)[
-                :, np.newaxis
-            ]
+            )
+            laser_energy = self._native_data("Laser_Energy_1064", do_fillvalue)
+            nsf = self._native_data("Noise_Scale_Factor_1064", do_fillvalue)
         else:
             raise Exception(
                 f"Error: Unrecognized wavelength: {wl}; use 532 or 1064 instead\n\n"
             )
         return nsf_from_V_domain_to_betap_domain(
             nsf, range_alt, laser_energy, calibration_cst, pgr
-        )
+        ).drop_attrs()
 
     def rms_in_ab_domain(self, wl, polar, do_fillvalue):
-        sat_alt = self._native_values("Spacecraft_Altitude", do_fillvalue)[
-            :, np.newaxis
-        ]
-        caliop_lidar_tilt = self._native_values("Off_Nadir_Angle", do_fillvalue)[
-            :, np.newaxis
-        ]
-        data_alt = self._native_values("Lidar_Data_Altitudes", do_fillvalue)[
-            np.newaxis, :
-        ]
-        range_alt = range_from_altitude(sat_alt, data_alt, caliop_lidar_tilt)
+        range_alt = self._range(do_fillvalue)
         pgr = np.array((1,))
         if wl == 532:
-            calibration_cst = self._native_values(
-                "Calibration_Constant_532", do_fillvalue
-            )[:, np.newaxis]
-            laser_energy = self._native_values("Laser_Energy_532", do_fillvalue)[
-                :, np.newaxis
-            ]
+            calibration_cst = self._native_data("Calibration_Constant_532", do_fillvalue)
+            laser_energy = self._native_data("Laser_Energy_532", do_fillvalue)
             if polar == "par":
-                rms = self._native_values(
-                    "Parallel_RMS_Baseline_532", do_fillvalue
-                )[:, np.newaxis]
-                gain = self._native_values(
-                    "Parallel_Amplifier_Gain_532", do_fillvalue
-                )[:, np.newaxis]
+                rms = self._native_data("Parallel_RMS_Baseline_532", do_fillvalue)
+                gain = self._native_data("Parallel_Amplifier_Gain_532", do_fillvalue)
             if polar == "per":
-                rms = self._native_values(
-                    "Perpendicular_RMS_Baseline_532", do_fillvalue
-                )[:, np.newaxis]
-                gain = self._native_values(
+                rms = self._native_data("Perpendicular_RMS_Baseline_532", do_fillvalue)
+                gain = self._native_data(
                     "Perpendicular_Amplifier_Gain_532", do_fillvalue
-                )[:, np.newaxis]
-                pgr = self._native_values(
-                    "Depolarization_Gain_Ratio_532", do_fillvalue
-                )[:, np.newaxis]
+                )
+                pgr = self._native_data("Depolarization_Gain_Ratio_532", do_fillvalue)
         elif wl == 1064:
-            calibration_cst = self._native_values(
+            calibration_cst = self._native_data(
                 "Calibration_Constant_1064", do_fillvalue
-            )[:, np.newaxis]
-            laser_energy = self._native_values("Laser_Energy_1064", do_fillvalue)[
-                :, np.newaxis
-            ]
-            rms = self._native_values("RMS_Baseline_1064", do_fillvalue)[
-                :, np.newaxis
-            ]
-            gain = self._native_values("Amplifier_Gain_1064", do_fillvalue)[
-                :, np.newaxis
-            ]
+            )
+            laser_energy = self._native_data("Laser_Energy_1064", do_fillvalue)
+            rms = self._native_data("RMS_Baseline_1064", do_fillvalue)
+            gain = self._native_data("Amplifier_Gain_1064", do_fillvalue)
         else:
             raise Exception(
                 f"Error: Unrecognized wavelength: {wl}; use 532 or 1064 instead\n\n"
             )
         return rms_from_P_domain_to_betap_domain(
             rms, range_alt, laser_energy, gain, calibration_cst, pgr
-        )
+        ).drop_attrs()
 
     def shotnoise(self, wl, polar, do_fillvalue):
-        nb_bins_shift = self._native_values("Number_Bins_Shift", do_fillvalue)
-        nb_bins_shift_abs = np.squeeze(np.abs(nb_bins_shift))
+        nb_bins_shift = self._native_data("Number_Bins_Shift", do_fillvalue)
         nsf = self.nsf_in_ab_domain(wl, polar, do_fillvalue)
         mol_ab, _ = self.molecular_profiles(wl, polar, do_fillvalue)
         fcorr = get_caliop_correction_function(wl)
         nb_pixels = get_nb_pixels(wl)
-        return compute_shotnoise(fcorr, nb_bins_shift_abs, nb_pixels, nsf, mol_ab)
+        return compute_shotnoise(fcorr, abs(nb_bins_shift), nb_pixels, nsf, mol_ab)
 
     def backgroundnoise(self, wl, polar, do_fillvalue):
-        nb_bins_shift = self._native_values("Number_Bins_Shift", do_fillvalue)
-        nb_bins_shift_abs = np.squeeze(np.abs(nb_bins_shift))
+        nb_bins_shift = self._native_data("Number_Bins_Shift", do_fillvalue)
         rms = self.rms_in_ab_domain(wl, polar, do_fillvalue)
         mol_ab, _ = self.molecular_profiles(wl, polar, do_fillvalue)
         fcorr = get_caliop_correction_function(wl)
         nb_pixels = get_nb_pixels(wl)
-        return compute_backgroundnoise(fcorr, nb_bins_shift_abs, nb_pixels, rms, mol_ab)
+        return compute_backgroundnoise(fcorr, abs(nb_bins_shift), nb_pixels, rms, mol_ab)
 
-    def interp_temperature(self, met_temp, do_fillvalue):
-        met_alt = self._native_values("Met_Data_Altitudes", do_fillvalue)
-        alt = np.ma.asarray(
-            self._native_values("Lidar_Data_Altitudes", do_fillvalue)
-        ).filled(FILL_VALUE_FLOAT)
-        met_temp = as_masked_array(met_temp)
-        # Replace last filled value (subsurface) with surface value (last not filled value)
-        last_notmasked_index = np.ma.notmasked_edges(met_temp, axis=1)[1]
-        for i in range(last_notmasked_index[0].size):
-            met_temp[i, last_notmasked_index[1][i] + 1 :] = met_temp[
-                i, last_notmasked_index[1][i]
-            ]
-        met_temp = met_temp.filled(
-            0
-        )  # Put 0 where still filled value (hopefully not) because it can't be mask array for interp
+    def interp_temperature(self, do_fillvalue):
+        """Return the temperature interpolated on the lidar data altitudes."""
+
+        # The interpolation cannot handle missing values, so they are resolved
+        # here whatever do_fillvalue
+        met_temp = mask_invalid(self._native_data("Temperature", do_fillvalue))
+        met_alt = self._native_data("Met_Data_Altitudes", do_fillvalue)
+        alt = self._native_data("Lidar_Data_Altitudes", do_fillvalue)
+        met_temp = _extend_surface_value(met_temp, MET_ALTITUDE_DIMENSION)
+        # Put 0 where still missing (hopefully not): interp1d needs finite values
+        met_temp = met_temp.fillna(0)
         # Interpolate to get temperature values for all lidar data alt
-        f = interp1d(met_alt, met_temp)
-        temp = f(alt)
-        return temp
+        f = interp1d(met_alt.values, met_temp.values)
+        temp = f(alt.fillna(FILL_VALUE_FLOAT).values)
+        profile_dim = met_temp.dims[0]
+        return xr.DataArray(
+            temp,
+            dims=(profile_dim, *alt.dims),
+            coords={profile_dim: met_temp.coords[profile_dim]},
+        )
+
+
+def _extend_surface_value(met_data, dim):
+    """Replace the missing values below the surface with the surface value.
+
+    The surface is the last valid level of each profile along ``dim``; missing
+    values above it are left missing. Profiles without any valid value stay
+    missing.
+    """
+
+    valid = met_data.notnull()
+    nb_valid_so_far = valid.cumsum(dim)
+    # From the surface downward, every valid value of the profile has been seen
+    at_or_below_surface = nb_valid_so_far == valid.sum(dim)
+    # argmax returns the first level reaching the total: the surface itself
+    surface = met_data.isel({dim: nb_valid_so_far.argmax(dim)})
+    return met_data.where(valid | ~at_or_below_surface, surface)

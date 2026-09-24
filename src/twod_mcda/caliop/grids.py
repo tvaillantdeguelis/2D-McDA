@@ -4,6 +4,7 @@ import numpy as np
 
 from twod_mcda.caliop.constants import (
     FILL_VALUE_FLOAT,
+    LIDAR_ALTITUDE_DIMENSION,
     LAYER_ALTITUDE_R1_INDEX_RANGE,
     LAYER_ALTITUDE_R2_INDEX_RANGE,
     LAYER_ALTITUDE_R3_INDEX_RANGE,
@@ -79,90 +80,47 @@ def alt_to_regular_30m_vertical_grid(alt, reverse_altitude=True):
     return reg_grid_alt
 
 
-def shape_to_regular_30m_vertical_grid(data, reverse_altitude=True):
+def regular_30m_grid_native_bins(reverse_altitude=True):
     """
-    Duplicate and/or average CALIOP data to get a regular 30 m vertical resolution grid.
-    reverse_altitude: if True, return array from bottom to top
+    Return, for each level of the regular 30 m grid, the index of the native CALIOP
+    bin it copies.
+    reverse_altitude: if True, list the levels from bottom to top
     """
 
-    # Initialization
-    nb_vert_levels = get_nb_regular_30m_vertical_levels()
-    reg_grid_r5_index_range = (0, N_BINS_R5 * N_30M_BINS_PER_BIN_R5)
-    reg_grid_r4_index_range = (
-        reg_grid_r5_index_range[1],
-        reg_grid_r5_index_range[1] + N_BINS_R4 * N_30M_BINS_PER_BIN_R4,
+    # Regions from top (R5) to bottom (R1), as the native bins are ordered
+    regions = (
+        (LAYER_ALTITUDE_R5_INDEX_RANGE, N_30M_BINS_PER_BIN_R5),
+        (LAYER_ALTITUDE_R4_INDEX_RANGE, N_30M_BINS_PER_BIN_R4),
+        (LAYER_ALTITUDE_R3_INDEX_RANGE, N_30M_BINS_PER_BIN_R3),
+        (LAYER_ALTITUDE_R2_INDEX_RANGE, N_30M_BINS_PER_BIN_R2),
+        (LAYER_ALTITUDE_R1_INDEX_RANGE, N_30M_BINS_PER_BIN_R1),
     )
-    reg_grid_r3_index_range = (
-        reg_grid_r4_index_range[1],
-        reg_grid_r4_index_range[1] + N_BINS_R3 * N_30M_BINS_PER_BIN_R3,
-    )
-    reg_grid_r2_index_range = (
-        reg_grid_r3_index_range[1],
-        reg_grid_r3_index_range[1] + N_BINS_R2 * N_30M_BINS_PER_BIN_R2,
-    )
-    reg_grid_r1_index_range = (
-        reg_grid_r2_index_range[1],
-        reg_grid_r2_index_range[1] + N_BINS_R1 * N_30M_BINS_PER_BIN_R1,
-    )
-
-    reg_grid_data = np.ma.ones((data.shape[0], nb_vert_levels)) * FILL_VALUE_FLOAT
-
-    # Duplicate data
-    reg_grid_data[:, reg_grid_r5_index_range[0] : reg_grid_r5_index_range[1]] = (
-        np.repeat(
-            data[
-                :,
-                LAYER_ALTITUDE_R5_INDEX_RANGE[0] : LAYER_ALTITUDE_R5_INDEX_RANGE[1] + 1,
-            ],
-            N_30M_BINS_PER_BIN_R5,
-            axis=1,
-        )
-    )
-    reg_grid_data[:, reg_grid_r4_index_range[0] : reg_grid_r4_index_range[1]] = (
-        np.repeat(
-            data[
-                :,
-                LAYER_ALTITUDE_R4_INDEX_RANGE[0] : LAYER_ALTITUDE_R4_INDEX_RANGE[1] + 1,
-            ],
-            N_30M_BINS_PER_BIN_R4,
-            axis=1,
-        )
-    )
-    reg_grid_data[:, reg_grid_r3_index_range[0] : reg_grid_r3_index_range[1]] = (
-        np.repeat(
-            data[
-                :,
-                LAYER_ALTITUDE_R3_INDEX_RANGE[0] : LAYER_ALTITUDE_R3_INDEX_RANGE[1] + 1,
-            ],
-            N_30M_BINS_PER_BIN_R3,
-            axis=1,
-        )
-    )
-    reg_grid_data[:, reg_grid_r2_index_range[0] : reg_grid_r2_index_range[1]] = (
-        np.repeat(
-            data[
-                :,
-                LAYER_ALTITUDE_R2_INDEX_RANGE[0] : LAYER_ALTITUDE_R2_INDEX_RANGE[1] + 1,
-            ],
-            N_30M_BINS_PER_BIN_R2,
-            axis=1,
-        )
-    )
-    reg_grid_data[:, reg_grid_r1_index_range[0] : reg_grid_r1_index_range[1]] = (
-        np.repeat(
-            data[
-                :,
-                LAYER_ALTITUDE_R1_INDEX_RANGE[0] : LAYER_ALTITUDE_R1_INDEX_RANGE[1] + 1,
-            ],
-            N_30M_BINS_PER_BIN_R1,
-            axis=1,
-        )
+    native_bins = np.concatenate(
+        [
+            np.repeat(np.arange(first, last + 1), nb_30m_bins_per_bin)
+            for (first, last), nb_30m_bins_per_bin in regions
+        ]
     )
 
     if reverse_altitude:
-        reg_grid_data = reg_grid_data[:, ::-1]
+        native_bins = native_bins[::-1]
 
-    return reg_grid_data
+    return native_bins
+
+
+def shape_to_regular_30m_vertical_grid(
+    data, dim=LIDAR_ALTITUDE_DIMENSION, reverse_altitude=True
+):
+    """
+    Duplicate CALIOP data along ``dim`` to get a regular 30 m vertical resolution grid.
+    Each regular level copies the native bin it falls in, so missing values (NaN)
+    stay missing.
+    reverse_altitude: if True, return array from bottom to top
+    """
+
+    native_bins = regular_30m_grid_native_bins(reverse_altitude)
+    # The algorithm has always run in double precision on the regular grid
+    return data.isel({dim: native_bins}).astype(np.float64)
 
 
 def get_nb_regular_30m_vertical_levels():

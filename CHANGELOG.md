@@ -1,5 +1,9 @@
 # Changelog
 
+### Removed
+
+- Removed the unused `get_full_density_array`.
+
 ## [2.8.0] - 2026-09-22
 
 ### Changed

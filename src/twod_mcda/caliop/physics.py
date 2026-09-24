@@ -1,10 +1,12 @@
 """Physical calculations derived from native CALIOP measurements."""
 
 import numpy as np
+import xarray as xr
 from scipy.interpolate import interp1d
 
 from twod_mcda.caliop.constants import (
     FILL_VALUE_FLOAT,
+    LIDAR_ALTITUDE_DIMENSION,
     LAYER_ALTITUDE_R1_INDEX_RANGE,
     LAYER_ALTITUDE_R2_INDEX_RANGE,
     LAYER_ALTITUDE_R3_INDEX_RANGE,
@@ -25,29 +27,25 @@ from twod_mcda.caliop.constants import (
 )
 
 
-def compute_par_ab532(tot_ab532, per_ab532):
+def compute_par_ab532(tot_ab532, per_ab532, dim=LIDAR_ALTITUDE_DIMENSION):
     """
     Compute parallel attenuated backscatter at 532 nm as the difference between total
     attenuated backscatter at 532 nm and perpendicular attenuated backscatter at 532 nm
+
+    :param tot_ab532: total attenuated backscatter at 532 nm, as a DataArray with NaN
+                      where missing
+    :param per_ab532: perpendicular attenuated backscatter at 532 nm, same layout
+    :param dim: vertical dimension along which a profile is summed
     """
 
-    par_ab532 = tot_ab532 - per_ab532.filled(
-        0
-    )  # filled mask value of per with 0 in order not
-    # to get filled value here
+    # Missing perpendicular values count as 0, so that they do not mask the
+    # parallel channel
+    par_ab532 = tot_ab532 - per_ab532.fillna(0)
 
     # Mask par_ab532 where 0 (all is due to per => fill value was in par)
-    # check if the whole column is 0 in order not to mask isolated pixel with
+    # check if the whole profile is 0 in order not to mask isolated pixel with
     # value exactly equal to 0 by chance
-    par_ab532 = np.ma.masked_where(
-        np.repeat(np.sum(par_ab532, axis=1), par_ab532.shape[1]).reshape(
-            par_ab532.shape
-        )
-        == 0,
-        par_ab532,
-    )
-
-    return par_ab532
+    return par_ab532.where(par_ab532.sum(dim) != 0)
 
 
 class NoValidMolecularProfile(Exception):
@@ -58,18 +56,34 @@ def compute_ab_mol_and_b_mol(mol_nd, O3_nd, alt, met_alt, wl, polar=None):
     """
     Compute molecular attenuated backscatter and backscatter from molecular and ozone number
     density.
+
+    :param mol_nd: molecular number density, DataArray (profile, met altitude) with NaN
+                   where missing
+    :param O3_nd: ozone number density, same layout
+    :param alt: lidar data altitudes, DataArray (lidar altitude)
+    :param met_alt: meteorological data altitudes, DataArray (met altitude)
+    :return: molecular attenuated backscatter and backscatter, DataArrays (profile, lidar
+             altitude), NaN for the profiles without a valid molecular model
     """
 
     # Initialization
-    nb_prof = mol_nd.shape[0]
-    ab_mol = np.ones((nb_prof, alt.size)) * FILL_VALUE_FLOAT
-    b_mol = np.ones((nb_prof, alt.size)) * FILL_VALUE_FLOAT
+    profile_dim = mol_nd.dims[0]
+    nb_prof = mol_nd.sizes[profile_dim]
+    ab_mol = np.full((nb_prof, alt.size), np.nan)
+    b_mol = np.full((nb_prof, alt.size), np.nan)
 
-    # Loop on profiles
+    # Loop on profiles: the model is a 1D kernel on plain arrays
+    mol_nd_values = mol_nd.values
+    O3_nd_values = O3_nd.values
     for i in range(nb_prof):
         try:
             _, b_mol_i, T2_mol, T2_O3 = make_molecular_model(
-                mol_nd[i, :], O3_nd[i, :], met_alt, alt, wl, polar
+                mol_nd_values[i, :],
+                O3_nd_values[i, :],
+                met_alt.values,
+                alt.values,
+                wl,
+                polar,
             )
         except NoValidMolecularProfile as e:
             print(f"Profile {i}: {e}")
@@ -77,7 +91,12 @@ def compute_ab_mol_and_b_mol(mol_nd, O3_nd, alt, met_alt, wl, polar=None):
         b_mol[i, :] = b_mol_i
         ab_mol[i, :] = b_mol_i * T2_mol * T2_O3
 
-    return ab_mol, b_mol
+    dims = (profile_dim, *alt.dims)
+    coords = {profile_dim: mol_nd.coords[profile_dim]}
+    return (
+        xr.DataArray(ab_mol, dims=dims, coords=coords),
+        xr.DataArray(b_mol, dims=dims, coords=coords),
+    )
 
 
 def make_molecular_model(mol_ND_met, O3_ND_met, Z_met, Z_data, wl, polar=None):
@@ -130,11 +149,11 @@ def make_molecular_model(mol_ND_met, O3_ND_met, Z_met, Z_data, wl, polar=None):
         raise NoValidMolecularProfile("All molecular or ozone values are fill_value")
 
     # Interpolate (using log) to get density values for all lidar data alt
-    Z_met = np.asarray(np.ma.getdata(Z_met), dtype=float)
+    Z_met = np.asarray(Z_met, dtype=float)
 
-    Z_data_array = np.ma.asarray(Z_data)
-    Z_data_values = np.asarray(np.ma.getdata(Z_data_array), dtype=float)
-    Z_data_mask = np.ma.getmaskarray(Z_data_array)
+    # Missing lidar altitudes are replaced with the reference CALIOP grid
+    Z_data_values = np.asarray(Z_data, dtype=float)
+    Z_data_mask = ~np.isfinite(Z_data_values)
 
     if np.any(Z_data_mask):
         reference_altitudes = np.asarray(
@@ -213,12 +232,11 @@ def replace_fillvalue_with_lowest_valid(
     fill_value=FILL_VALUE_FLOAT,
     positive_only=False,
 ):
-    """Replace masked/invalid values with the lowest valid value."""
+    """Replace missing (NaN) or fill values with the lowest valid value."""
 
-    array = np.ma.asarray(ND_met)
-    values = np.asarray(np.ma.getdata(array), dtype=float)
+    values = np.asarray(ND_met, dtype=float)
 
-    valid = ~np.ma.getmaskarray(array) & np.isfinite(values) & (values != fill_value)
+    valid = np.isfinite(values) & (values != fill_value)
 
     if positive_only:
         valid &= values > 0
@@ -232,25 +250,6 @@ def replace_fillvalue_with_lowest_valid(
     values[~valid] = lowest_valid
 
     return values
-
-
-def get_full_density_array(metDensity, metAltitude, Z):
-    # metDensity and metAltitude are meteorological data from the CALIPSO
-    # level 1 files both are 1-D arrays, with the max altitude at index 0,
-    # and a max dimension of 33
-    #
-    # Z is a 1-D array of CALIPSO lidar data altitudes max altitude at index
-    # 0, max dimension = 583
-    #
-    # the return value, rho, is an array of interpolated "metDensity" values
-    # corresponding to each altitude in Z
-
-    lnDensity = np.ma.log(metDensity)
-    f = interp1d(metAltitude, lnDensity)
-    rho = f(Z)
-    rho = np.exp(rho)
-
-    return rho
 
 
 def extinction2two_way_transmittance(sigma, Z):
@@ -285,28 +284,33 @@ def rms_from_P_domain_to_betap_domain(
 
 def range_from_altitude(spacecraft_alt, data_alt, caliop_lidar_tilt):
     """Return the range between the spacecraft and a lidar altitude bin."""
-    return (spacecraft_alt - data_alt) / np.cos(caliop_lidar_tilt * np.pi / 180.0)
+    # CALIOP stores the tilt in float32: take its cosine in double precision
+    tilt = caliop_lidar_tilt.astype(np.float64) * np.pi / 180.0
+    return (spacecraft_alt - data_alt) / np.cos(tilt)
 
 
 def _correction_values(fcorr, bin_shifts):
-    """Select correction values from integer-valued CALIOP bin shifts."""
+    """Select correction values from integer-valued CALIOP bin shifts.
 
-    shifts = np.ma.masked_invalid(np.ma.asarray(bin_shifts))
-    shifts = np.ma.atleast_1d(shifts)
-    values = shifts.compressed()
+    :param fcorr: correction table, DataArray (lidar altitude, bin_shift)
+    :param bin_shifts: absolute bin shift of each profile, DataArray (profile) with NaN
+                       where missing
+    :return: DataArray (profile, lidar altitude), NaN where the bin shift is missing
+    """
+
+    valid = np.isfinite(bin_shifts)
+    values = bin_shifts.values[valid.values]
     if values.size and not np.allclose(values, np.rint(values)):
         raise ValueError("Number_Bins_Shift contains non-integer values")
 
-    indices = np.ma.filled(shifts, 0).astype(np.intp, copy=False)
-    if indices.size and (indices.min() < 0 or indices.max() >= fcorr.shape[1]):
+    indices = bin_shifts.where(valid, 0).astype(np.intp)
+    if indices.size and (
+        indices.min() < 0 or indices.max() >= fcorr.sizes["bin_shift"]
+    ):
         raise IndexError("Number_Bins_Shift is outside the correction table")
 
-    correction = fcorr[:, indices].T
-    mask = np.broadcast_to(
-        np.ma.getmaskarray(shifts)[:, np.newaxis],
-        correction.shape,
-    )
-    return np.ma.array(correction, mask=mask, copy=False)
+    correction = fcorr.isel(bin_shift=indices).where(valid)
+    return correction.transpose(*bin_shifts.dims, ...)
 
 
 def compute_shotnoise(fcorr, nb_bins_shift_abs, nb_pixels, nsf, mol_ab):
@@ -413,7 +417,7 @@ def get_caliop_correction_function(wl):
         1.596,
     ]
 
-    return fcorr
+    return xr.DataArray(fcorr, dims=(LIDAR_ALTITUDE_DIMENSION, "bin_shift"))
 
 
 def get_nb_pixels(wl):
@@ -463,4 +467,4 @@ def get_nb_pixels(wl):
     else:
         raise ValueError(f"Unrecognized wavelength: {wl}; use 532 or 1064 instead")
 
-    return nb_pixels
+    return xr.DataArray(nb_pixels, dims=(LIDAR_ALTITUDE_DIMENSION,))
