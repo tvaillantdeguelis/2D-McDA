@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.12.0] - 2026-09-28
+
+### Changed
+
+- The windowing on the candidate pixels counts them with summed-area tables instead of looping over every pixel of the window, which makes the processing about 12 times faster with identical output.
+
 ## [2.11.0] - 2026-09-28
 
 ### Fixed
