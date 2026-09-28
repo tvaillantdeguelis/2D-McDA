@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.11.0] - 2026-09-28
+
+### Fixed
+
+- Fixed the averaging below 8.2 km, which lowered the threshold of the first 340 profiles instead of the bins below 8.2 km and could misalign its 1 km blocks.
+
 ## [2.10.0] - 2026-09-28
 
 ### Changed
@@ -268,6 +274,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.11.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.10.0...v2.11.0
 [2.10.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.7.0...v2.8.0

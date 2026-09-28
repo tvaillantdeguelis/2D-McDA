@@ -126,7 +126,9 @@ def _apply_detection_level(history, level, channel, sr_sigma, params):
     return sr_sigma
 
 
-def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
+def detect_features(
+    sr, sr_sigma, b_mol, temperature, surf_alt_index, channel, first_profile
+):
     """Detect features in ATSR signal of lidar channel.
 
     Five detection levels run in turn, each one lowering its threshold and so
@@ -135,7 +137,8 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     attenuated columns have been flagged.
 
     Every input is a plain array, with NaN where missing; the feature mask is a
-    uint8 array of flags.
+    uint8 array of flags. ``first_profile`` is the index, in its granule, of the
+    first profile.
     """
 
     # Get feature detection parameters
@@ -164,7 +167,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
 
     with timer("Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)"):
         # Note: sr_sigma needs to be modified below 8.2 km
-        history.sr, sr_sigma = average_below_8_2(history.sr, sr_sigma)
+        history.sr, sr_sigma = average_below_8_2(history.sr, sr_sigma, first_profile)
 
     with timer("Flag 'almost FA' where lidar signal is very weak"):
         history.feature = FLAG_WEAK_SIGNAL(
@@ -273,6 +276,7 @@ def detect_features_in_channel(data, surface_indexes, channel):
         mask_invalid(data["Temperature"]).values,
         surface_indexes.values,
         channel,
+        int(template.coords["profile"][0]),
     )
     base_coords = {
         "profile": template.coords["profile"],
