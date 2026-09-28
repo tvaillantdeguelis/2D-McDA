@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.10.0] - 2026-09-28
+
+### Changed
+
+- The algorithm, output and viewer work on arrays with NaN for missing values instead of NumPy masked arrays.
+
 ## [2.9.0] - 2026-09-24
 
 ### Changed
@@ -262,6 +268,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.10.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.6.0...v2.7.0
