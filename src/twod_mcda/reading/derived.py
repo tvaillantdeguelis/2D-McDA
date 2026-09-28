@@ -15,6 +15,7 @@ from scipy.interpolate import interp1d
 from twod_mcda.caliop.physics import (
     compute_ab_mol_and_b_mol,
     compute_backgroundnoise,
+    compute_molecular_model,
     compute_par_ab532,
     compute_shotnoise,
     get_caliop_correction_function,
@@ -44,6 +45,7 @@ class DerivedVariables:
             "532per": None,
             "1064": None,
         }
+        self._molecular_models = {}
 
     def _native_data(self, key, do_fillvalue):
         """Return a native variable as a labelled DataArray, NaN where missing."""
@@ -68,13 +70,17 @@ class DerivedVariables:
     def molecular_profiles(self, wl, polar, do_fillvalue):
         channel = str(wl) + polar
         if self._molecular_profiles[channel] is None:
+            # The two 532 nm channels share one model, only polarized differently
+            if wl not in self._molecular_models:
+                self._molecular_models[wl] = compute_molecular_model(
+                    self._native_data("Molecular_Number_Density", do_fillvalue),
+                    self._native_data("Ozone_Number_Density", do_fillvalue),
+                    self._native_data("Lidar_Data_Altitudes", do_fillvalue),
+                    self._native_data("Met_Data_Altitudes", do_fillvalue),
+                    wl,
+                )
             self._molecular_profiles[channel] = compute_ab_mol_and_b_mol(
-                self._native_data("Molecular_Number_Density", do_fillvalue),
-                self._native_data("Ozone_Number_Density", do_fillvalue),
-                self._native_data("Lidar_Data_Altitudes", do_fillvalue),
-                self._native_data("Met_Data_Altitudes", do_fillvalue),
-                wl,
-                polar,
+                self._molecular_models[wl], polar
             )
         return self._molecular_profiles[channel]
 

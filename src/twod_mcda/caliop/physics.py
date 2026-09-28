@@ -1,8 +1,9 @@
 """Physical calculations derived from native CALIOP measurements."""
 
+from typing import NamedTuple
+
 import numpy as np
 import xarray as xr
-from scipy.interpolate import interp1d
 
 from twod_mcda.caliop.constants import (
     FILL_VALUE_FLOAT,
@@ -48,183 +49,145 @@ def compute_par_ab532(tot_ab532, per_ab532, dim=LIDAR_ALTITUDE_DIMENSION):
     return par_ab532.where(par_ab532.sum(dim) != 0)
 
 
-class NoValidMolecularProfile(Exception):
-    pass
+# Molecular and ozone cross sections for each wavelength, see Table 4.2 in
+# Hostetler et al. (2006; ATBD)
+MOL_BACKSCATTER_CROSS_SECT = {532: 5.982e-32, 1064: 3.620e-33}  # (m^2 / sr^-1)
+MOL_EXT_CROSS_SECT = {532: 5.167e-31, 1064: 3.127e-32}  # (m^2)
+O3_EXT_CROSS_SECT_532 = 2.72846e-25  # (m^2), negligible at 1064 nm
+DEPOLAR_532 = 0.00366  # depolarization ratio (b_per/b_par) for Cabannes scattering
 
 
-def compute_ab_mol_and_b_mol(mol_nd, O3_nd, alt, met_alt, wl, polar=None):
-    """
-    Compute molecular attenuated backscatter and backscatter from molecular and ozone number
-    density.
+class MolecularModel(NamedTuple):
+    """Unpolarized molecular model of one wavelength.
 
-    :param mol_nd: molecular number density, DataArray (profile, met altitude) with NaN
-                   where missing
-    :param O3_nd: ozone number density, same layout
-    :param alt: lidar data altitudes, DataArray (lidar altitude)
-    :param met_alt: meteorological data altitudes, DataArray (met altitude)
-    :return: molecular attenuated backscatter and backscatter, DataArrays (profile, lidar
-             altitude), NaN for the profiles without a valid molecular model
+    Every array is indexed (profile, lidar altitude), NaN for the profiles
+    without a valid model. ``T2_O3`` is None at 1064 nm, where the ozone
+    two-way transmittance is 1.
     """
 
-    # Initialization
-    profile_dim = mol_nd.dims[0]
-    nb_prof = mol_nd.sizes[profile_dim]
-    ab_mol = np.full((nb_prof, alt.size), np.nan)
-    b_mol = np.full((nb_prof, alt.size), np.nan)
-
-    # Loop on profiles: the model is a 1D kernel on plain arrays
-    mol_nd_values = mol_nd.values
-    O3_nd_values = O3_nd.values
-    for i in range(nb_prof):
-        try:
-            _, b_mol_i, T2_mol, T2_O3 = make_molecular_model(
-                mol_nd_values[i, :],
-                O3_nd_values[i, :],
-                met_alt.values,
-                alt.values,
-                wl,
-                polar,
-            )
-        except NoValidMolecularProfile as e:
-            print(f"Profile {i}: {e}")
-            continue
-        b_mol[i, :] = b_mol_i
-        ab_mol[i, :] = b_mol_i * T2_mol * T2_O3
-
-    dims = (profile_dim, *alt.dims)
-    coords = {profile_dim: mol_nd.coords[profile_dim]}
-    return (
-        xr.DataArray(ab_mol, dims=dims, coords=coords),
-        xr.DataArray(b_mol, dims=dims, coords=coords),
-    )
+    beta_mol: xr.DataArray
+    T2_mol: xr.DataArray
+    T2_O3: xr.DataArray | None
 
 
-def make_molecular_model(mol_ND_met, O3_ND_met, Z_met, Z_data, wl, polar=None):
-    # mol_ND_met (molecular number density) and O3_ND_met (ozone number density)
-    # are 1-D arrays, with the max altitude at index 0 (I'm assuming these will be
-    # 33-element met data arrays)
-    #
-    # Z_met is the altitude array corresponding to the mol_ND_met
-    # and O3_ND_met array; Z_data is (intended to be) the standard
-    # CALIPSO altitude array
-    #
-    # wl is an integer -- either 532 or 1064 -- specifying the wavelength
-    # for the model
-    #
-    # the return value is an array of molecular attenuated backscatter
-    # coefficients, with dimensions equal to the dimensions of Z_data
+def compute_molecular_model(mol_nd, O3_nd, alt, met_alt, wl):
+    """
+    Compute the molecular backscatter and two-way transmittances of every profile from
+    the molecular and ozone number densities.
 
-    # mol_ND_met (m^-3)
-    # O3_ND_met (m^-3)
-    # Z_met (km)
-    # Z_data (km)
-    # wl (nm)
+    :param mol_nd: molecular number density (m^-3), DataArray (profile, met altitude)
+                   with NaN where missing, max altitude at index 0
+    :param O3_nd: ozone number density (m^-3), same layout
+    :param alt: lidar data altitudes (km), DataArray (lidar altitude)
+    :param met_alt: meteorological data altitudes (km), DataArray (met altitude)
+    :param wl: wavelength (nm), 532 or 1064
+    :return: MolecularModel, NaN for the profiles without a valid molecular model
+    """
 
-    wavelengthOK = (wl == 532) | (wl == 1064)
-    if not wavelengthOK:
+    if wl not in (532, 1064):
         raise Exception(
             f"Error: Unrecognized wavelength: {wl}; use 532 or 1064 instead\n\n"
         )
 
-    # Define molecular and ozone cross section for each wavelength
-    # see Table 4.2 in Hostetler et al. (2006; ATDB)
-    if wl == 532:
-        mol_backscatter_cross_sect = 5.982e-32  # (m^2 / sr^-1)
-        mol_ext_cross_sect = 5.167e-31  # (m^2)
-        O3_ext_cross_sect = 2.72846e-25  # (m^2)
-        depolar = 0.00366  # depolarization ratio (b_per/b_par) for Cabannes
-        # scattering
-    else:  #  wl = 1064
-        mol_backscatter_cross_sect = 3.620e-33  # (m^2 / sr^-1)
-        mol_ext_cross_sect = 3.127e-32  # (m^2)
-
-    # Handle fill values
-    mol_ND_met = replace_fillvalue_with_lowest_valid(
-        mol_ND_met,
-        positive_only=True,
+    # Handle fill values; a profile without any valid value has no model
+    mol_ND_met, mol_invalid = replace_fillvalue_with_lowest_valid(
+        mol_nd.values, positive_only=True
     )
-    O3_ND_met = replace_fillvalue_with_lowest_valid(O3_ND_met)
-
-    if mol_ND_met is None or O3_ND_met is None:
-        raise NoValidMolecularProfile("All molecular or ozone values are fill_value")
-
-    # Interpolate (using log) to get density values for all lidar data alt
-    Z_met = np.asarray(Z_met, dtype=float)
-
-    # Missing lidar altitudes are replaced with the reference CALIOP grid
-    Z_data_values = np.asarray(Z_data, dtype=float)
-    Z_data_mask = ~np.isfinite(Z_data_values)
-
-    if np.any(Z_data_mask):
-        reference_altitudes = np.asarray(
-            LIDAR_DATA_ALTITUDES,
-            dtype=float,
+    O3_ND_met, O3_invalid = replace_fillvalue_with_lowest_valid(O3_nd.values)
+    invalid_profiles = mol_invalid | O3_invalid
+    if np.any(invalid_profiles):
+        print(
+            f"\t{np.count_nonzero(invalid_profiles)} profiles without valid "
+            "molecular or ozone values: no molecular model there"
         )
 
-        if reference_altitudes.shape != Z_data_values.shape:
+    # Missing lidar altitudes are replaced with the reference CALIOP grid
+    Z_met = np.asarray(met_alt, dtype=float)
+    Z_data = np.asarray(alt, dtype=float)
+    Z_data_mask = ~np.isfinite(Z_data)
+    if np.any(Z_data_mask):
+        reference_altitudes = np.asarray(LIDAR_DATA_ALTITUDES, dtype=float)
+        if reference_altitudes.shape != Z_data.shape:
             raise ValueError("LIDAR_DATA_ALTITUDES has an unexpected shape")
+        Z_data = Z_data.copy()
+        Z_data[Z_data_mask] = reference_altitudes[Z_data_mask]
 
-        Z_data_values = Z_data_values.copy()
-        Z_data_values[Z_data_mask] = reference_altitudes[Z_data_mask]
+    # Interpolate (using log) to get density values for all lidar data alt
+    interpolate = _linear_interpolator(Z_met, Z_data)
+    mol_ND_data = np.exp(interpolate(np.log(mol_ND_met)))
 
-    Z_data = Z_data_values
-
-    interp_log_mol = interp1d(
-        Z_met, np.log(mol_ND_met), bounds_error=False, fill_value="extrapolate"
-    )
-    mol_ND_data = np.exp(interp_log_mol(Z_data))
-    if False:
-        ax = plt.subplot(111)
-        plt.plot(mol_ND_met, Z_met, marker="o", c="r", label="met", zorder=-1)
-        plt.scatter(mol_ND_data, Z_data, s=2, label="data")
-        # ax.set_xscale('log')
-        plt.legend()
-        plt.title("Molecular number density")
-        plt.show()
-
-    # Convert number density to molecular backscatter coefficients
-    beta_mol = 1000.0 * mol_backscatter_cross_sect * mol_ND_data  # (km^-1 / sr^-1)
-
-    if polar == "par":
-        beta_mol = beta_mol / (1 + depolar)
-    elif polar == "per":
-        beta_mol = beta_mol * depolar / (1 + depolar)
-
-    # Convert number density to molecular extinction coefficients
-    ext_mol = 1000.0 * mol_ext_cross_sect * mol_ND_data  # (km^-1)
+    # Convert number density to molecular backscatter and extinction coefficients
+    beta_mol = 1000.0 * MOL_BACKSCATTER_CROSS_SECT[wl] * mol_ND_data  # (km^-1 sr^-1)
+    ext_mol = 1000.0 * MOL_EXT_CROSS_SECT[wl] * mol_ND_data  # (km^-1)
 
     # Derive molecular two-way transmittance values from the extinction
     # coefficient
     T2_mol = extinction2two_way_transmittance(ext_mol, Z_data)
 
+    T2_O3 = None
     if wl == 532:
-
-        # Interpolate to get density values for all lidar data alt
-        # f = interp1d(Z_met, O3_ND_met)
-        # O3_ND_data = f(Z_data)
-        interp_O3 = interp1d(
-            Z_met, O3_ND_met, bounds_error=False, fill_value="extrapolate"
-        )
-        O3_ND_data = interp_O3(Z_data)
-        if False:
-            plt.plot(O3_ND_met, Z_met, marker="o", c="r", label="met", zorder=-1)
-            plt.scatter(O3_ND_data, Z_data, s=2, label="data")
-            plt.legend()
-            plt.title("Molecular number density")
-            plt.show()
-
-        # Convert number density to molecular extinction coefficients
-        ext_O3 = 1000.0 * O3_ext_cross_sect * O3_ND_data  # (km^-1)
-
-        # Derive O3 two-way transmittance values from the extinction
-        # coefficient
+        # Same for the ozone, interpolated without log
+        ext_O3 = 1000.0 * O3_EXT_CROSS_SECT_532 * interpolate(O3_ND_met)  # (km^-1)
         T2_O3 = extinction2two_way_transmittance(ext_O3, Z_data)
 
-    else:  # 1064 nm
-        # O3 two-way transmittance = 1
-        T2_O3 = np.ones(T2_mol.size)
+    def labelled(values):
+        values[invalid_profiles, :] = np.nan
+        return xr.DataArray(
+            values,
+            dims=(mol_nd.dims[0], *alt.dims),
+            coords={mol_nd.dims[0]: mol_nd.coords[mol_nd.dims[0]]},
+        )
 
-    return mol_ND_data, beta_mol, T2_mol, T2_O3
+    return MolecularModel(
+        labelled(beta_mol),
+        labelled(T2_mol),
+        None if T2_O3 is None else labelled(T2_O3),
+    )
+
+
+def compute_ab_mol_and_b_mol(model, polar):
+    """
+    Return the molecular attenuated backscatter and backscatter of one channel.
+
+    :param model: MolecularModel of the channel's wavelength
+    :param polar: "par" or "per" for the 532 nm polarized channels, "" otherwise
+    :return: molecular attenuated backscatter and backscatter, DataArrays (profile,
+             lidar altitude)
+    """
+
+    b_mol = model.beta_mol
+    if polar == "par":
+        b_mol = b_mol / (1 + DEPOLAR_532)
+    elif polar == "per":
+        b_mol = b_mol * DEPOLAR_532 / (1 + DEPOLAR_532)
+
+    ab_mol = b_mol * model.T2_mol
+    if model.T2_O3 is not None:
+        ab_mol = ab_mol * model.T2_O3
+    return ab_mol, b_mol
+
+
+def _linear_interpolator(x, x_new):
+    """Return a function interpolating rows of values given at ``x`` to ``x_new``.
+
+    The interpolation weights only depend on the altitudes, shared by every
+    profile, so they are computed once. Same formula as ``scipy.interpolate.
+    interp1d(x, y, fill_value="extrapolate")``: the first and last segments are
+    extended beyond the range of ``x``.
+    """
+
+    order = np.argsort(x, kind="mergesort")
+    x = x[order]
+    hi = np.searchsorted(x, x_new).clip(1, len(x) - 1)
+    lo = hi - 1
+    w_hi = (x_new - x[lo]) / (x[hi] - x[lo])
+    w_lo = (x[hi] - x_new) / (x[hi] - x[lo])
+
+    def interpolate(values):
+        values = values[:, order]
+        return w_hi * values[:, hi] + w_lo * values[:, lo]
+
+    return interpolate
 
 
 def replace_fillvalue_with_lowest_valid(
@@ -232,7 +195,12 @@ def replace_fillvalue_with_lowest_valid(
     fill_value=FILL_VALUE_FLOAT,
     positive_only=False,
 ):
-    """Replace missing (NaN) or fill values with the lowest valid value."""
+    """Replace missing (NaN) or fill values with the lowest valid value.
+
+    ``ND_met`` is indexed (profile, met altitude), max altitude at index 0, so
+    the lowest valid value of a profile is its last valid one. Returns the
+    completed values and whether each profile has no valid value at all.
+    """
 
     values = np.asarray(ND_met, dtype=float)
 
@@ -241,15 +209,13 @@ def replace_fillvalue_with_lowest_valid(
     if positive_only:
         valid &= values > 0
 
-    if not np.any(valid):
-        return None
+    no_valid = ~np.any(valid, axis=1)
+    last_valid = values.shape[1] - 1 - np.argmax(valid[:, ::-1], axis=1)
+    lowest_valid = values[np.arange(values.shape[0]), last_valid]
+    # A profile without any valid value becomes missing (NaN) everywhere
+    lowest_valid[no_valid] = np.nan
 
-    lowest_valid = values[np.flatnonzero(valid)[-1]]
-
-    values = values.copy()
-    values[~valid] = lowest_valid
-
-    return values
+    return np.where(valid, values, lowest_valid[:, np.newaxis]), no_valid
 
 
 def extinction2two_way_transmittance(sigma, Z):
@@ -257,15 +223,15 @@ def extinction2two_way_transmittance(sigma, Z):
     optical depths and derive two-way transmittances
 
     Args:
-        sigma (_type_): extinction coefficients
-        Z (_type_): corresponding altitudes
+        sigma: extinction coefficients, indexed (profile, altitude)
+        Z: corresponding altitudes, from top to bottom
 
     Returns:
-        _type_: two-way transmittance values
+        two-way transmittance values, same shape as sigma
     """
     dz = -np.diff(Z, prepend=Z[0])  # Prepend avoids mismatch in size
-    optical_depth = np.cumsum((sigma + np.roll(sigma, 1)) * dz / 2)
-    optical_depth[0] = 0  # Ensure first value is 0
+    optical_depth = np.cumsum((sigma + np.roll(sigma, 1, axis=1)) * dz / 2, axis=1)
+    optical_depth[:, 0] = 0  # Ensure first value is 0
 
     return np.exp(-2 * optical_depth)
 

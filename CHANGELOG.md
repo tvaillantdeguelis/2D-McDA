@@ -7,6 +7,7 @@
 - The windowing on the candidate pixels counts them with summed-area tables instead of looping over every pixel of the window, which makes the processing about 12 times faster with identical output.
 - The per-pixel loops of the attenuation correction and of the likely-artifact, fully-attenuated, and weak-signal flagging are compiled with Numba, which halves the remaining processing time with identical output.
 - The Numba functions are cached on disk, so that they are only compiled once instead of at every run.
+- The molecular model is computed for all the profiles of a slice at once instead of profile by profile, and once for both 532 nm channels, which makes it about 10 times faster with identical output. 
 
 ### Fixed
 
