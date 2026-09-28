@@ -28,7 +28,6 @@ from twod_mcda.parameters import (
     get_feature_detection_coef,
 )
 from twod_mcda.utils.arrays import mask_invalid
-from twod_mcda.utils.timing import timer
 
 
 class _DetectionHistory:
@@ -98,30 +97,25 @@ def _apply_detection_level(history, level, channel, sr_sigma, params):
         return sr_sigma
 
     if a is not None:
-        with timer("Apply a gaussian horizontal line window averaging"):
-            history.sr, sr_sigma = gaussian_2d_window(
-                a[0], a[1], history.sr, history.feature, sr_sigma
-            )
+        # Apply a gaussian horizontal line window averaging
+        history.sr, sr_sigma = gaussian_2d_window(
+            a[0], a[1], history.sr, history.feature, sr_sigma
+        )
 
-    with timer(
-        "Apply threshold to get very high echo (likely PMT artifact)"
-        if level == 1
-        else "Apply threshold"
-    ):
-        history.feature = apply_threshold(k, history.feature, history.sr, sr_sigma)
+    # Apply threshold (at level 1, to get very high echo, likely PMT artifact)
+    history.feature = apply_threshold(k, history.feature, history.sr, sr_sigma)
 
     if s is not None:
-        with timer("Windowing on the 'maybe' pixels"):
-            history.feature = apply_window(s[0], s[1], history.feature, level)
+        # Windowing on the 'maybe' pixels
+        history.feature = apply_window(s[0], s[1], history.feature, level)
 
-    with timer(
-        "Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors number limit condition"
-    ):
-        history.feature = replace_maybe(n, history.feature, level)
+    # Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors
+    # number limit condition
+    history.feature = replace_maybe(n, history.feature, level)
 
     if level == 1:
-        with timer("Flag 'Likely Artifact' below those high signal to some extent"):
-            history.feature = fill_likely_artifact(params, history.feature, level)
+        # Flag 'Likely Artifact' below those high signal to some extent
+        history.feature = fill_likely_artifact(params, history.feature, level)
 
     return sr_sigma
 
@@ -149,62 +143,46 @@ def detect_features(
         np.zeros(sr.shape, dtype=np.uint8),
     )
 
-    with timer("Put 'Surface' flag on feature mask"):
-        history.feature = apply_surface_detection(history.feature, surf_alt_index)
-
-    with timer("Remove detected pixel from ATSR"):
-        history.sr = remove_detect_from_sr(history.sr, history.feature)
+    # Put 'Surface' flag on feature mask
+    history.feature = apply_surface_detection(history.feature, surf_alt_index)
+    history.sr = remove_detect_from_sr(history.sr, history.feature)
 
     for level in (1, 2, 3, 4):
-        with timer(f"Detection level {level}"):
-            sr_sigma = _apply_detection_level(history, level, channel, sr_sigma, params)
+        sr_sigma = _apply_detection_level(history, level, channel, sr_sigma, params)
 
-    with timer("Flag 'Fully Attenuated' from lowest altitude to first feature"):
-        history.feature = fill_fully_attenuated(history.feature)
+    # Flag 'Fully Attenuated' from lowest altitude to first feature
+    history.feature = fill_fully_attenuated(history.feature)
+    history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    with timer("Remove detected pixel from ATSR"):
-        history.sr = remove_detect_from_sr(history.sr, history.feature)
+    # Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)
+    # Note: sr_sigma needs to be modified below 8.2 km
+    history.sr, sr_sigma = average_below_8_2(history.sr, sr_sigma, first_profile)
 
-    with timer("Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)"):
-        # Note: sr_sigma needs to be modified below 8.2 km
-        history.sr, sr_sigma = average_below_8_2(history.sr, sr_sigma, first_profile)
+    # Flag 'almost FA' where lidar signal is very weak
+    history.feature = FLAG_WEAK_SIGNAL(params, history.feature, history.sr, sr_sigma)
+    history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    with timer("Flag 'almost FA' where lidar signal is very weak"):
-        history.feature = FLAG_WEAK_SIGNAL(
-            params, history.feature, history.sr, sr_sigma
-        )
+    # Correct sr signal below feature from transmittance using fixed lidar ratio
+    # above and below params.temp_ice_liquid
+    history.sr, twoway_transmittance_array = transmission_correction(
+        history.sr, sr, b_mol, history.feature, temperature, params
+    )
 
-    with timer("Remove detected pixel from ATSR"):
-        history.sr = remove_detect_from_sr(history.sr, history.feature)
+    # Fill small strip between FA where strip < nb_prof_min prof
+    history.feature = fill_small_strips(params, history.feature)
+    feature_before_averaging = history.feature
+    history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    with timer(
-        "Correct sr signal below feature from transmittance using fixed lidar "
-        f"ratio above and below {params.temp_ice_liquid} °C"
-    ):
-        history.sr, twoway_transmittance_array = transmission_correction(
-            history.sr, sr, b_mol, history.feature, temperature, params
-        )
+    sr_sigma = _apply_detection_level(history, 5, channel, sr_sigma, params)
 
-    with timer("Fill small strip between FA where strip < nb_prof_min prof"):
-        history.feature = fill_small_strips(params, history.feature)
-        feature_before_averaging = history.feature
+    # Reput all not confident flags where overwritten during averaging
+    history.feature = reput_low_confidence_flags(
+        history.feature, feature_before_averaging
+    )
+    history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    with timer("Remove detected pixel from ATSR"):
-        history.sr = remove_detect_from_sr(history.sr, history.feature)
-
-    with timer("Detection level 5"):
-        sr_sigma = _apply_detection_level(history, 5, channel, sr_sigma, params)
-
-    with timer("Reput all not confident flags where overwritten during averaging"):
-        history.feature = reput_low_confidence_flags(
-            history.feature, feature_before_averaging
-        )
-
-    with timer("Remove detected pixel from ATSR"):
-        history.sr = remove_detect_from_sr(history.sr, history.feature)
-
-    with timer("Stack every recorded detection step into 3D arrays"):
-        feature_array_steps, sr_array_steps = history.to_arrays(sr.shape)
+    # Stack every recorded detection step into 3D arrays
+    feature_array_steps, sr_array_steps = history.to_arrays(sr.shape)
 
     return (
         history.feature,
@@ -321,12 +299,11 @@ def detect_features_in_3_channels(data, surface_indexes):
     masks = []
     development = []
     for channel in ("532_par", "532_per", "1064"):
-        with timer(f"Feature detection at {channel}"):
-            mask, channel_development = detect_features_in_channel(
-                data,
-                surface_indexes[channel],
-                channel,
-            )
+        mask, channel_development = detect_features_in_channel(
+            data,
+            surface_indexes[channel],
+            channel,
+        )
         masks.append(mask)
         development.append(channel_development)
 

@@ -11,7 +11,6 @@ from twod_mcda.caliop.physics import (
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
 from twod_mcda.utils.arrays import mask_invalid
 from twod_mcda.parameters import SurfaceDetectionParameters
-from twod_mcda.utils.timing import timer
 
 FILL_VALUE_INT = 999
 
@@ -216,60 +215,52 @@ def detect_surface(
     # Get surface detection parameters
     params = SurfaceDetectionParameters(channel)
 
-    with timer("Test if DEM estimated surface altitude is correct"):
-        for i in np.arange(est_surf_alt.size):
-            if (est_surf_alt[i] < np.min(alt)) | (est_surf_alt[i] > np.max(alt)):
-                raise Exception(
-                    f"DEM surface_elevation[{i}] = {est_surf_alt[i]:.3f} looks uncorrect"
-                )
+    # Test if DEM estimated surface altitude is correct
+    for i in np.arange(est_surf_alt.size):
+        if (est_surf_alt[i] < np.min(alt)) | (est_surf_alt[i] > np.max(alt)):
+            raise Exception(
+                f"DEM surface_elevation[{i}] = {est_surf_alt[i]:.3f} looks uncorrect"
+            )
 
-    with timer("Compute RMS in beta' domain at surface"):
-        r_surf = range_from_altitude(alt_sat, est_surf_alt, caliop_lidar_tilt)
-        rms_betap_surf = rms_from_P_domain_to_betap_domain(
-            rms, r_surf, energy, gain, calib, pgr
-        )
+    # Compute RMS in beta' domain at surface
+    r_surf = range_from_altitude(alt_sat, est_surf_alt, caliop_lidar_tilt)
+    rms_betap_surf = rms_from_P_domain_to_betap_domain(
+        rms, r_surf, energy, gain, calib, pgr
+    )
 
-    with timer("Compute bin index of estimated surface altitude"):
-        est_surf_alt_index = np.argmin(
-            np.abs(alt - est_surf_alt[:, np.newaxis]), axis=1
-        )
+    # Compute bin index of estimated surface altitude
+    est_surf_alt_index = np.argmin(np.abs(alt - est_surf_alt[:, np.newaxis]), axis=1)
 
-    with timer("Define surface search region"):
-        min_index_search_region, max_index_search_region = surf_search_region(
-            surf_type, est_surf_alt, est_surf_alt_index, alt, params
-        )
+    min_index_search_region, max_index_search_region = surf_search_region(
+        surf_type, est_surf_alt, est_surf_alt_index, alt, params
+    )
 
-    with timer("Compute derivatives"):
-        deriv = compute_deriv(ab, alt)
+    deriv = compute_deriv(ab, alt)
 
-    with timer("Get min and max in search region"):
-        i_min, i_max, alt_min, alt_max = get_min_max_deriv(
-            deriv, alt, min_index_search_region, max_index_search_region
-        )
+    # Get min and max of the derivative in search region
+    i_min, i_max, alt_min, alt_max = get_min_max_deriv(
+        deriv, alt, min_index_search_region, max_index_search_region
+    )
 
-    with timer("Get maximum signal magnitude"):
-        ab_max, ab_argmax = get_max_ab_signal(ab, i_min, i_max)
+    # Get maximum signal magnitude
+    ab_max, ab_argmax = get_max_ab_signal(ab, i_min, i_max)
 
-    with timer("Surface detection"):
-        i_surf, alt_surf = apply_surf_detection_rules(
-            i_min,
-            i_max,
-            alt_min,
-            alt_max,
-            ab_max,
-            ab_argmax,
-            params,
-            rms_betap_surf,
-            ab,
-            deriv,
-            alt,
-            channel,
-        )
+    i_surf, alt_surf = apply_surf_detection_rules(
+        i_min,
+        i_max,
+        alt_min,
+        alt_max,
+        ab_max,
+        ab_argmax,
+        params,
+        rms_betap_surf,
+        ab,
+        deriv,
+        alt,
+        channel,
+    )
 
-    with timer("Remove false positives"):
-        i_surf, alt_surf = remove_false_pos(
-            i_surf, alt_surf, params, est_surf_alt_index
-        )
+    i_surf, alt_surf = remove_false_pos(i_surf, alt_surf, params, est_surf_alt_index)
 
     return i_surf
 
@@ -342,19 +333,10 @@ def detect_surface_in_channel(data, channel):
 def detect_surface_in_3_channels(data):
     """Return surface indexes for the three lidar channels."""
 
-    with timer("Surface detection at 532_par"):
-        parallel = detect_surface_in_channel(data, "532_par")
-
-    with timer("Surface detection at 532_per"):
-        perpendicular = detect_surface_in_channel(data, "532_per")
-
-    with timer("Surface detection at 1064"):
-        infrared = detect_surface_in_channel(data, "1064")
-
     return xr.Dataset(
         {
-            "532_par": parallel,
-            "532_per": perpendicular,
-            "1064": infrared,
+            "532_par": detect_surface_in_channel(data, "532_par"),
+            "532_per": detect_surface_in_channel(data, "532_per"),
+            "1064": detect_surface_in_channel(data, "1064"),
         }
     )

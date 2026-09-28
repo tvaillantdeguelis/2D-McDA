@@ -41,28 +41,23 @@ def run_granule_pipeline(cfg):
     start_tic = time.perf_counter()
     print(f"\nStart time: {start_time}")
 
-    with timer("Resolve processing configuration and locate CALIOP files"):
-        processing_request = resolve_processing_request(cfg)
+    processing_request = resolve_processing_request(cfg)
 
     # Opens the granule's HDF file and resolves its subset bounds, but does not
     # load any scientific array yet (that happens per slice, in load_slice()).
-    with timer("Open current CALIOP granule"):
-        current_granule_reader = open_granule(processing_request)
+    current_granule_reader = open_granule(processing_request)
 
     # This ``with`` guarantees that the HDF file closes, even after an error.
     with current_granule_reader as current_granule_reader:
         # -----------------------------------------------------------------
         # One-time setup for this granule, before the slice loop.
         # -----------------------------------------------------------------
-        with timer("Plan profile slices and their overlapping context"):
-            slices = plan_slices(
-                current_granule_reader,
-                NB_PROF_SLICE,
-                NB_PROF_CONTEXT,
-            )
-
-        with timer("Load neighboring granule context profiles"):
-            adjacent_context = load_adjacent_context(processing_request, slices)
+        slices = plan_slices(
+            current_granule_reader,
+            NB_PROF_SLICE,
+            NB_PROF_CONTEXT,
+        )
+        adjacent_context = load_adjacent_context(processing_request, slices)
 
         print_processing_summary(
             processing_request,
@@ -71,75 +66,58 @@ def run_granule_pipeline(cfg):
             adjacent_context,
         )
 
-        with timer("Initialize the output datasets"):
-            outputs = empty_outputs(current_granule_reader)
+        outputs = empty_outputs(current_granule_reader)
         # -----------------------------------------------------------------
 
         for index, bounds in enumerate(slices, start=1):
-            # ``timer`` only measures and prints the duration of this block.
-            with timer(
+            print(
                 f"Process slice {index:d}/{len(slices):d} "
                 f"(profiles {bounds.profile_min:d} to {bounds.profile_max:d} "
                 f"using slice {bounds.context_min:d} to {bounds.context_max:d})"
-            ):
-                # Reads this slice's profiles from the current granule, plus
-                # (at file edges only) context profiles from the neighboring
-                # granule, so the algorithm below never sees an artificial edge.
-                with timer("Load slice data"):
-                    slice_data = load_slice(
-                        bounds,
-                        current_granule_reader,
-                        adjacent_context,
-                    )
+            )
 
-                # ---------------------------------------------------------
-                # 2D-McDA scientific algorithm, applied to this slice only.
-                # ---------------------------------------------------------
-                with timer("Detect the surface in the three lidar channels"):
-                    surfaces = detect_surface_in_3_channels(slice_data.input)
+            # Reads this slice's profiles from the current granule, plus
+            # (at file edges only) context profiles from the neighboring
+            # granule, so the algorithm below never sees an artificial edge.
+            slice_data = load_slice(
+                bounds,
+                current_granule_reader,
+                adjacent_context,
+            )
 
-                with timer("Detect features in the three lidar channels"):
-                    slice_data.masks, slice_data.development = (
-                        detect_features_in_3_channels(slice_data.input, surfaces)
-                    )
+            # ---------------------------------------------------------
+            # 2D-McDA scientific algorithm, applied to this slice only.
+            # ---------------------------------------------------------
+            surfaces = detect_surface_in_3_channels(slice_data.input)
+            slice_data.masks, slice_data.development = detect_features_in_3_channels(
+                slice_data.input, surfaces
+            )
+            trim_slice_context(slice_data)
+            slice_data.masks["Composite_Detection_Flags"] = merged_feature_masks(
+                slice_data.masks["Parallel_Detection_Flags_532"],
+                slice_data.masks["Perpendicular_Detection_Flags_532"],
+                slice_data.masks["Detection_Flags_1064"],
+            )
+            # ---------------------------------------------------------
 
-                with timer("Remove neighboring granule context profiles"):
-                    trim_slice_context(slice_data)
+            # Copy slice results to the output datasets
+            if processing_request.save_development_data:
+                store_development(
+                    outputs.development,
+                    slice_data.development,
+                    bounds,
+                    current_granule_reader,
+                )
+            store_slice(
+                outputs.detection,
+                slice_data,
+                bounds,
+                current_granule_reader,
+            )
 
-                with timer("Merge the three channels into a composite mask"):
-                    slice_data.masks["Composite_Detection_Flags"] = (
-                        merged_feature_masks(
-                            slice_data.masks["Parallel_Detection_Flags_532"],
-                            slice_data.masks["Perpendicular_Detection_Flags_532"],
-                            slice_data.masks["Detection_Flags_1064"],
-                        )
-                    )
-                # ---------------------------------------------------------
+        product_to_write = assemble_results(outputs, current_granule_reader)
 
-                with timer("Copy slice results to the output datasets"):
-                    if processing_request.save_development_data:
-                        store_development(
-                            outputs.development,
-                            slice_data.development,
-                            bounds,
-                            current_granule_reader,
-                        )
-                    store_slice(
-                        outputs.detection,
-                        slice_data,
-                        bounds,
-                        current_granule_reader,
-                    )
-
-        with timer("Assemble arrays and metadata for the NetCDF product"):
-            product_to_write = assemble_results(outputs, current_granule_reader)
-
-    print(
-        "\n\n############################################################"
-        "\n*****Save data in netCDF file...*****"
-    )
-    with timer("Save data in netCDF file"):
-        output_path = write_product(processing_request, product_to_write)
+    output_path = write_product(processing_request, product_to_write)
 
     end_time = datetime.now().astimezone()
     total_time = time.perf_counter() - start_tic
