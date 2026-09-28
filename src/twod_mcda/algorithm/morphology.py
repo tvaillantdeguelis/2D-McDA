@@ -104,7 +104,7 @@ def apply_window(
 
     return new_feature
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def replace_maybe_jit(
     nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL, prev_detect, prevprev_detect
 ):
@@ -232,7 +232,7 @@ def replace_maybe(
 
     return new_feature
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def fill_small_strips_jit(feature, nb_prof_min):
     """Part extracted from fill_small_strips function for faster processing
     with @jit"""

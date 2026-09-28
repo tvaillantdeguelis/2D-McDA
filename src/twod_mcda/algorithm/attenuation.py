@@ -6,7 +6,7 @@ from numba import jit
 from twod_mcda.parameters import FLAG_FA, FLAG_NOTHING, FLAG_SURFACE
 
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def transmission_correction_jit(
     new_sr,
     sr_init,

@@ -37,13 +37,17 @@ class _DetectionHistory:
     assignment is recorded under its own step number, so ``to_arrays`` can stack
     the whole run into the two 3-D arrays of the development product. Assigning
     is therefore not free: every ``history.feature = ...`` consumes a step.
+
+    With ``record_steps`` false, only the current mask and signal are kept, so
+    that the intermediate states are freed as soon as they are replaced.
     """
 
-    def __init__(self, sr, feature):
+    def __init__(self, sr, feature, record_steps):
         self._sr = sr
         self._feature = feature
-        self._signals = {0: sr}
-        self._features = {0: feature}
+        self._record_steps = record_steps
+        self._signals = {0: sr} if record_steps else {}
+        self._features = {0: feature} if record_steps else {}
         self._step = 0
 
     @property
@@ -54,7 +58,8 @@ class _DetectionHistory:
     def feature(self, values):
         self._step += 1
         self._feature = values
-        self._features[self._step] = values
+        if self._record_steps:
+            self._features[self._step] = values
 
     @property
     def sr(self):
@@ -64,7 +69,8 @@ class _DetectionHistory:
     def sr(self, values):
         self._step += 1
         self._sr = values
-        self._signals[self._step] = values
+        if self._record_steps:
+            self._signals[self._step] = values
 
     def to_arrays(self, shape):
         """Stack every recorded state, leaving untouched steps at their default."""
@@ -121,7 +127,14 @@ def _apply_detection_level(history, level, channel, sr_sigma, params):
 
 
 def detect_features(
-    sr, sr_sigma, b_mol, temperature, surf_alt_index, channel, first_profile
+    sr,
+    sr_sigma,
+    b_mol,
+    temperature,
+    surf_alt_index,
+    channel,
+    first_profile,
+    save_steps,
 ):
     """Detect features in ATSR signal of lidar channel.
 
@@ -132,7 +145,8 @@ def detect_features(
 
     Every input is a plain array, with NaN where missing; the feature mask is a
     uint8 array of flags. ``first_profile`` is the index, in its granule, of the
-    first profile.
+    first profile. The intermediate masks and signals are only stacked into 3-D
+    arrays when ``save_steps`` is true; otherwise both are returned as None.
     """
 
     # Get feature detection parameters
@@ -141,6 +155,7 @@ def detect_features(
     history = _DetectionHistory(
         sr.copy(),
         np.zeros(sr.shape, dtype=np.uint8),
+        save_steps,
     )
 
     # Put 'Surface' flag on feature mask
@@ -182,7 +197,9 @@ def detect_features(
     history.sr = remove_detect_from_sr(history.sr, history.feature)
 
     # Stack every recorded detection step into 3D arrays
-    feature_array_steps, sr_array_steps = history.to_arrays(sr.shape)
+    feature_array_steps, sr_array_steps = (
+        history.to_arrays(sr.shape) if save_steps else (None, None)
+    )
 
     return (
         history.feature,
@@ -226,8 +243,11 @@ FEATURE_INPUTS_BY_CHANNEL = {
 }
 
 
-def detect_features_in_channel(data, surface_indexes, channel):
-    """Run feature detection for one lidar channel."""
+def detect_features_in_channel(data, surface_indexes, channel, save_development_data):
+    """Run feature detection for one lidar channel.
+
+    The development dataset is empty unless ``save_development_data`` is true.
+    """
 
     try:
         (
@@ -255,6 +275,7 @@ def detect_features_in_channel(data, surface_indexes, channel):
         surface_indexes.values,
         channel,
         int(template.coords["profile"][0]),
+        save_development_data,
     )
     base_coords = {
         "profile": template.coords["profile"],
@@ -266,6 +287,9 @@ def detect_features_in_channel(data, surface_indexes, channel):
         coords=base_coords,
         name=mask_name,
     )
+    if not save_development_data:
+        return detection_mask, xr.Dataset()
+
     step_dimension = f"step_{channel}"
     step_coords = {
         step_dimension: np.arange(steps.shape[0]),
@@ -293,8 +317,12 @@ def detect_features_in_channel(data, surface_indexes, channel):
     return detection_mask, development
 
 
-def detect_features_in_3_channels(data, surface_indexes):
-    """Run feature detection and return masks and development arrays."""
+def detect_features_in_3_channels(data, surface_indexes, save_development_data):
+    """Run feature detection and return masks and development arrays.
+
+    The development arrays are only built when ``save_development_data`` is
+    true; otherwise the returned development dataset is empty.
+    """
 
     masks = []
     development = []
@@ -303,6 +331,7 @@ def detect_features_in_3_channels(data, surface_indexes):
             data,
             surface_indexes[channel],
             channel,
+            save_development_data,
         )
         masks.append(mask)
         development.append(channel_development)

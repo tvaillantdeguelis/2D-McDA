@@ -31,7 +31,6 @@ from .slicing import (
     trim_slice_context,
 )
 from .utils.reporting import print_processing_summary
-from .utils.timing import timer
 
 
 def run_granule_pipeline(cfg):
@@ -90,7 +89,9 @@ def run_granule_pipeline(cfg):
             # ---------------------------------------------------------
             surfaces = detect_surface_in_3_channels(slice_data.input)
             slice_data.masks, slice_data.development = detect_features_in_3_channels(
-                slice_data.input, surfaces
+                slice_data.input,
+                surfaces,
+                processing_request.save_development_data,
             )
             trim_slice_context(slice_data)
             slice_data.masks["Composite_Detection_Flags"] = merged_feature_masks(

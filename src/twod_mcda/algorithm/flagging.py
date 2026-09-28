@@ -55,7 +55,7 @@ def apply_threshold(k, feature, sr, sr_sigma, where_FA=False):
 
     return new_feature
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def fill_likely_artifact_jit(feature, FLAG_VERY_HIGH_ECHO, nb_bins_PMT_artifact):
     """Part extracted from fill_likely_artifact function for faster processing
     with @jit"""
@@ -101,7 +101,7 @@ def fill_likely_artifact(params, feature, FLAG_VERY_HIGH_ECHO):
         params.nb_bins_PMT_artifact,
     )
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def fill_fully_attenuated_jit(feature):
     """Part extracted from fill_fully_attenuated function for faster
     processing with @jit"""
@@ -141,7 +141,7 @@ def fill_fully_attenuated(feature):
 
     return fill_fully_attenuated_jit(feature.copy())
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def flag_weak_signal_jit(feature, sr, sr_thresold, weak_signal_ratio):
     """Part extracted from FLAG_WEAK_SIGNAL function for faster processing
     with @jit"""
