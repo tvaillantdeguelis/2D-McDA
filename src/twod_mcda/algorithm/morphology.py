@@ -2,8 +2,9 @@
 
 These decide whether a pixel belongs to a real structure by looking at the
 pixels around it: windowing, connected patterns of candidate pixels, and small
-horizontal strips. Each one pairs a wrapper with a Numba kernel, which works
-in place on a copy of the mask.
+horizontal strips. The windowing counts pixels with summed-area tables; the
+two others pair a wrapper with a Numba kernel, which works in place on a copy
+of the mask.
 """
 
 import numpy as np
@@ -20,82 +21,37 @@ from twod_mcda.parameters import (
 )
 
 
-@jit(nopython=True)
-def apply_window_jit(
-    w_side,
-    h_side,
-    feature,
-    nb_pixels_window,
-    min_percent,
-    detected_pixels,
-    FLAG_DETECTION_LEVEL,
-):
-    """Part extracted from apply_window function for faster processing with
-    @jit"""
+def _window_sums(pixels, width_window, height_window):
+    """Count the ``pixels`` in the window centered on each interior pixel.
 
-    for i in np.arange(w_side, feature.shape[0] - w_side):
-        for j in np.arange(h_side, feature.shape[1] - h_side):
-            if (feature[i, j] == FLAG_NOTHING) | (feature[i, j] == FLAG_MAYBE):
-                # Tuple with indexes of the window
-                window = (
-                    slice(i - w_side, i + w_side + 1),
-                    slice(j - h_side, j + h_side + 1),
-                )
+    ``pixels`` is a boolean image indexed (profile, altitude); the window spans
+    ``width_window`` profiles × ``height_window`` altitudes. A summed-area table
+    gives every count in four lookups, so the cost does not depend on the window
+    size. Returns the counts of the pixels whose window lies entirely inside the
+    image, i.e. an array smaller than ``pixels`` by the window size minus one.
+    """
 
-                # Count nb of "maybe"
-                nb_maybe = list(feature[window].flatten()).count(FLAG_MAYBE)
-
-                # Count nb of "previous detection level" (d-1)
-                nb_detected_1 = 0
-                if FLAG_DETECTION_LEVEL > 1:  # if previous detection exists
-                    prev_FLAG_DETECTION_LEVEL = FLAG_DETECTION_LEVEL - 1
-                    nb_detected_1 = list(feature[window].flatten()).count(
-                        prev_FLAG_DETECTION_LEVEL
-                    )
-
-                # Total detected at n and n-1
-                nb_tot = nb_maybe + nb_detected_1
-
-                # Count nb of special (and detection <= d-2) and remove
-                # from nb_pixels_window
-                nb_surface = list(feature[window].flatten()).count(FLAG_SURFACE)
-                nb_likely_artifact = list(feature[window].flatten()).count(
-                    FLAG_LIKELY_ARTIFACT
-                )
-                nb_FA = list(feature[window].flatten()).count(FLAG_FA)
-                nb_AFA = list(feature[window].flatten()).count(FLAG_AFA)
-                nb_small_strips = list(feature[window].flatten()).count(
-                    FLAG_SMALL_STRIPS
-                )
-                nb_detected_2_and_before = 0
-                if FLAG_DETECTION_LEVEL > 1:  # if previous detection exists
-                    for prev_FLAG_DETECTION_LEVEL in np.arange(
-                        1, FLAG_DETECTION_LEVEL - 1
-                    ):
-                        nb_detected_2_and_before += list(
-                            feature[window].flatten()
-                        ).count(prev_FLAG_DETECTION_LEVEL)
-                nb_pixels_window_2 = (
-                    nb_pixels_window
-                    - nb_FA
-                    - nb_AFA
-                    - nb_surface
-                    - nb_likely_artifact
-                    - nb_small_strips
-                    - nb_detected_2_and_before
-                )
-
-                # Flag detected if amount above limit
-                nb_min_tot = nb_pixels_window_2 * min_percent
-                if nb_tot >= nb_min_tot:
-                    detected_pixels[i, j] = 1
-
-    return feature
+    table = np.zeros((pixels.shape[0] + 1, pixels.shape[1] + 1), dtype=np.int64)
+    np.cumsum(np.cumsum(pixels, axis=0, dtype=np.int64), axis=1, out=table[1:, 1:])
+    return (
+        table[width_window:, height_window:]
+        - table[:-width_window, height_window:]
+        - table[width_window:, :-height_window]
+        + table[:-width_window, :-height_window]
+    )
 
 def apply_window(
     height_window, width_window, feature, FLAG_DETECTION_LEVEL, min_percent=0.5
 ):
-    # min_percent: min pourcentage of total counted pixels in the window to flag the center as "detected"
+    """Keep as 'maybe' the pixels whose window is mostly made of detections.
+
+    A 'nothing' or 'maybe' pixel becomes 'maybe' when the 'maybe' pixels and the
+    previous level detections fill at least ``min_percent`` of its window, not
+    counting the pixels already flagged otherwise (surface, (almost) fully
+    attenuated, likely artifact, small strips, and detections from two levels
+    back or more). Pixels closer to the image edge than half a window are never
+    flagged.
+    """
 
     # Initialization
     new_feature = feature.copy()
@@ -113,26 +69,42 @@ def apply_window(
     h_side = int(height_window / 2)  # nb of pixel each side of the center
     w_side = int(width_window / 2)  # nb of pixel each side of the center
 
-    # Apply moving window
-    new_feature = apply_window_jit(
-        w_side,
-        h_side,
-        new_feature,
-        nb_pixels_window,
-        min_percent,
-        detected_pixels,
-        FLAG_DETECTION_LEVEL,
+    # Pixels counted as detected: "maybe" and previous detection level (d-1)
+    counted = feature == FLAG_MAYBE
+    # Pixels removed from the window: special flags and detection <= d-2
+    excluded = np.isin(
+        feature,
+        (FLAG_SURFACE, FLAG_LIKELY_ARTIFACT, FLAG_FA, FLAG_AFA, FLAG_SMALL_STRIPS),
     )
+    if FLAG_DETECTION_LEVEL > 1:  # if previous detection exists
+        counted |= feature == FLAG_DETECTION_LEVEL - 1
+        excluded |= (feature >= 1) & (feature <= FLAG_DETECTION_LEVEL - 2)
 
-    # Remove previous "maybe" pixels (or not if keep_all==True)
+    # Apply moving window, if the image is at least as large as the window
+    if feature.shape[0] >= width_window and feature.shape[1] >= height_window:
+        interior = (
+            slice(w_side, feature.shape[0] - w_side),
+            slice(h_side, feature.shape[1] - h_side),
+        )
+        nb_tot = _window_sums(counted, width_window, height_window)
+        nb_pixels_window_2 = nb_pixels_window - _window_sums(
+            excluded, width_window, height_window
+        )
+
+        # Flag detected if amount above limit
+        detected_pixels[interior] = (
+            (feature[interior] == FLAG_NOTHING) | (feature[interior] == FLAG_MAYBE)
+        ) & (nb_tot >= nb_pixels_window_2 * min_percent)
+
+    # Remove previous "maybe" pixels
     new_feature[new_feature == FLAG_MAYBE] = FLAG_NOTHING
 
     # Replace by those which result from the windowing
-    new_feature[detected_pixels == 1] = FLAG_MAYBE
+    new_feature[detected_pixels] = FLAG_MAYBE
 
     return new_feature
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def replace_maybe_jit(
     nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL, prev_detect, prevprev_detect
 ):
@@ -260,7 +232,7 @@ def replace_maybe(
 
     return new_feature
 
-@jit(nopython=True)
+@jit(nopython=True, cache=True)
 def fill_small_strips_jit(feature, nb_prof_min):
     """Part extracted from fill_small_strips function for faster processing
     with @jit"""

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.12.0] - 2026-09-28
+
+### Changed
+
+- The windowing on the candidate pixels counts them with summed-area tables instead of looping over every pixel of the window, which makes the processing about 12 times faster with identical output.
+- The per-pixel loops of the attenuation correction and of the likely-artifact, fully-attenuated, and weak-signal flagging are compiled with Numba, which halves the remaining processing time with identical output.
+- The Numba functions are cached on disk, so that they are only compiled once instead of at every run.
+- The molecular model is computed for all the profiles of a slice at once instead of profile by profile, and once for both 532 nm channels, which makes it about 10 times faster with identical output. 
+
+### Fixed
+
+- The intermediate detection steps are only kept when `save_development_data` is enabled. They were otherwise stacked into large 3-D arrays and discarded, which took about 20 % of the processing time and raised the peak memory of a full granule to several GB (1.7 GB now).
+
 ## [2.11.0] - 2026-09-28
 
 ### Fixed
@@ -274,6 +287,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.12.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.11.0...v2.12.0
 [2.11.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.10.0...v2.11.0
 [2.10.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.8.0...v2.9.0

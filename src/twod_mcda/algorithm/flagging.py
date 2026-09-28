@@ -7,6 +7,7 @@ that is ``morphology``.
 """
 
 import numpy as np
+from numba import jit
 
 from twod_mcda.parameters import (
     FLAG_AFA,
@@ -54,54 +55,65 @@ def apply_threshold(k, feature, sr, sr_sigma, where_FA=False):
 
     return new_feature
 
-def fill_likely_artifact(params, feature, FLAG_VERY_HIGH_ECHO):
-    """Put flag "Likely artifact" below high signal points"""
+@jit(nopython=True, cache=True)
+def fill_likely_artifact_jit(feature, FLAG_VERY_HIGH_ECHO, nb_bins_PMT_artifact):
+    """Part extracted from fill_likely_artifact function for faster processing
+    with @jit"""
 
     # Initialization
-    nb_alt = feature.shape[1]
     nb_prof = feature.shape[0]
-    new_feature = feature.copy()
+    nb_alt = feature.shape[1]
 
     # Loop on profiles
     for i in range(nb_prof):
         # From bottom to top
-        for j in np.arange(nb_alt):
+        for j in range(nb_alt):
             # Look for FLAG_VERY_HIGH_ECHO
-            if new_feature[i, j] == FLAG_VERY_HIGH_ECHO:
+            if feature[i, j] == FLAG_VERY_HIGH_ECHO:
                 # If FLAG_VERY_HIGH_ECHO at the very bottom
                 if j == 0:
                     # Nothing to flag below
                     continue
                 # If bin below is FLAG_VERY_HIGH_ECHO
-                elif new_feature[i, j - 1] == FLAG_VERY_HIGH_ECHO:
+                elif feature[i, j - 1] == FLAG_VERY_HIGH_ECHO:
                     # Same layer, already done
                     continue
-                # Else, flag below on the params.nb_bins_PMT_artifact extent
+                # Else, flag below on the nb_bins_PMT_artifact extent
                 else:
                     # Go down
                     j2 = j - 1
                     while (
-                        (j2 >= 0)
-                        & (j - j2 <= params.nb_bins_PMT_artifact)
-                        & (new_feature[i, j2] == FLAG_NOTHING)
+                        j2 >= 0
+                        and j - j2 <= nb_bins_PMT_artifact
+                        and feature[i, j2] == FLAG_NOTHING
                     ):
-                        new_feature[i, j2] = FLAG_LIKELY_ARTIFACT
+                        feature[i, j2] = FLAG_LIKELY_ARTIFACT
                         j2 -= 1
 
-    return new_feature
+    return feature
 
-def fill_fully_attenuated(feature):
-    """Fill with flag 'Fully Attenuated' from lowest altitude to first feature"""
+def fill_likely_artifact(params, feature, FLAG_VERY_HIGH_ECHO):
+    """Put flag "Likely artifact" below high signal points"""
+
+    return fill_likely_artifact_jit(
+        feature.copy(),
+        FLAG_VERY_HIGH_ECHO,
+        params.nb_bins_PMT_artifact,
+    )
+
+@jit(nopython=True, cache=True)
+def fill_fully_attenuated_jit(feature):
+    """Part extracted from fill_fully_attenuated function for faster
+    processing with @jit"""
 
     # Initialization
     nb_prof = feature.shape[0]
     nb_alt = feature.shape[1]
-    new_feature = feature.copy()
 
     # Loop on profiles
-    for i in np.arange(nb_prof):
+    for i in range(nb_prof):
         # If surface detected
-        if new_feature[i, 0] == FLAG_SURFACE:
+        if feature[i, 0] == FLAG_SURFACE:
             # No 'Fully Attenuated' here
             continue
         # If surface not detected
@@ -110,44 +122,47 @@ def fill_fully_attenuated(feature):
             j = 0
             # While layer not reached
             while (
-                (new_feature[i, j] == FLAG_NOTHING)
-                | (new_feature[i, j] == FLAG_LIKELY_ARTIFACT)
-            ) & (j < nb_alt):
+                feature[i, j] == FLAG_NOTHING or feature[i, j] == FLAG_LIKELY_ARTIFACT
+            ) and j < nb_alt:
                 # Flag 'Fully Attenuated'
-                new_feature[i, j] = FLAG_FA
+                feature[i, j] = FLAG_FA
                 j += 1
                 # If reach top (30.1 km)
                 if j >= nb_alt:
                     # Remove all FA in the profile
-                    new_feature[i, :] = FLAG_NOTHING
+                    feature[i, :] = FLAG_NOTHING
                     # And stop
                     break
 
-    return new_feature
+    return feature
 
-def FLAG_WEAK_SIGNAL(params, feature, sr, sr_sigma):
-    """Flag where, between detected layers, more than ratio_nb are below
-    sr_thresold"""
+def fill_fully_attenuated(feature):
+    """Fill with flag 'Fully Attenuated' from lowest altitude to first feature"""
+
+    return fill_fully_attenuated_jit(feature.copy())
+
+@jit(nopython=True, cache=True)
+def flag_weak_signal_jit(feature, sr, sr_thresold, weak_signal_ratio):
+    """Part extracted from FLAG_WEAK_SIGNAL function for faster processing
+    with @jit"""
 
     # Initialization
-    sr_thresold = sr_sigma * params.weak_signal_ratio_threshold
     nb_prof = feature.shape[0]
     nb_alt = feature.shape[1]
-    new_feature = feature.copy()
 
     # Loop on profiles
-    for i in np.arange(nb_prof):
+    for i in range(nb_prof):
         # From lowest altitude go up
         nb_below = 0  # nb ranges below threshold
         nb_tot = 0  # total nb ranges in the region between 2 layers
         j = 0
         # While top not reached
         while j < nb_alt:
-            if new_feature[i, j] != FLAG_NOTHING:
+            if feature[i, j] != FLAG_NOTHING:
                 j += 1  # not yet in region with no detection
                 continue
             cs_min_index = j  # min index of the "CS" region
-            while new_feature[i, j] == FLAG_NOTHING:
+            while feature[i, j] == FLAG_NOTHING:
                 nb_tot += 1
                 if sr[i, j] < sr_thresold[i, j]:
                     nb_below += 1
@@ -156,13 +171,24 @@ def FLAG_WEAK_SIGNAL(params, feature, sr, sr_sigma):
                     break
             cs_max_index = j - 1  # max index of the "CS" region
             # If fraction_nb_below_threshold below limit put flag in this region
-            if nb_below / nb_tot > params.weak_signal_ratio:
+            if nb_below / nb_tot > weak_signal_ratio:
                 if cs_max_index < nb_alt - 1:  # not if no layer above
-                    new_feature[i, cs_min_index : cs_max_index + 1] = FLAG_AFA
+                    feature[i, cs_min_index : cs_max_index + 1] = FLAG_AFA
             nb_below = 0
             nb_tot = 0
 
-    return new_feature
+    return feature
+
+def FLAG_WEAK_SIGNAL(params, feature, sr, sr_sigma):
+    """Flag where, between detected layers, more than ratio_nb are below
+    sr_thresold"""
+
+    return flag_weak_signal_jit(
+        feature.copy(),
+        sr,
+        sr_sigma * params.weak_signal_ratio_threshold,
+        params.weak_signal_ratio,
+    )
 
 def reput_low_confidence_flags(feature, feature_before_av):
     """Reput all not confident flags where overwritten during averaging"""

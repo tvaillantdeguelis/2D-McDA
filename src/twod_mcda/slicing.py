@@ -182,31 +182,20 @@ def load_slice(bounds, granule_reader, adjacent_context):
     if bounds.first_profile_to_load == 0 and previous is not None:
         first_time = data["Profile_Time"].isel(profile=0).item()
         previous_time = previous["Profile_Time"].isel(profile=-1).item()
-        time_gap = np.abs(first_time - previous_time)
-        print(
-            "\tTime between last profile of previous file and first profile "
-            f"of current file = {time_gap:.2f} s"
-        )
         if profiles_are_consecutive(previous_time, first_time):
-            print("\tAppend previous granule")
             slice_data.input = append_adjacent_profiles(data, previous, "start")
             slice_data.nb_profiles_previous_context = previous.sizes["profile"]
         else:
+            time_gap = np.abs(first_time - previous_time)
             print(
-                "\tPrevious granule does not seem consecutive. "
-                "No start context added."
+                "\tPrevious granule does not seem consecutive "
+                f"({time_gap:.2f} s gap). No start context added."
             )
 
     if bounds.last_profile_to_load == granule_last_profile and following is not None:
         following_time = following["Profile_Time"].isel(profile=0).item()
         last_time = data["Profile_Time"].isel(profile=-1).item()
-        time_gap = np.abs(following_time - last_time)
-        print(
-            "\tTime between last profile of current file and first profile "
-            f"of next file = {time_gap:.2f} s"
-        )
         if profiles_are_consecutive(last_time, following_time):
-            print("\tAppend next granule")
             slice_data.input = append_adjacent_profiles(
                 slice_data.input,
                 following,
@@ -214,7 +203,11 @@ def load_slice(bounds, granule_reader, adjacent_context):
             )
             slice_data.nb_profiles_next_context = following.sizes["profile"]
         else:
-            print("\tNext granule does not seem consecutive. No end context added.")
+            time_gap = np.abs(following_time - last_time)
+            print(
+                "\tNext granule does not seem consecutive "
+                f"({time_gap:.2f} s gap). No end context added."
+            )
 
     return slice_data
 
@@ -254,7 +247,6 @@ def trim_slice_context(slice_data):
     for side, nb_profiles_context in context_by_side:
         if nb_profiles_context == 0:
             continue
-        print(f"\n\n*****Remove context from {side} adjacent file...*****")
         slice_data.input = trim_profiles(slice_data.input, nb_profiles_context, side)
         slice_data.masks = trim_profiles(slice_data.masks, nb_profiles_context, side)
         slice_data.development = trim_profiles(

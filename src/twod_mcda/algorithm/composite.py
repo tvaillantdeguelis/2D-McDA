@@ -3,7 +3,6 @@
 #!/usr/bin/env python
 # coding: utf8
 
-from datetime import datetime
 import numpy as np
 import xarray as xr
 
@@ -48,7 +47,6 @@ def change_detection_values(mask):
 def merged_feature_masks(mask_532_par, mask_532_per, mask_1064):
     """Merged the feature masks from the 3 channels"""
 
-    tic_function = datetime.now()
     template = mask_532_par if isinstance(mask_532_par, xr.DataArray) else None
     mask_532_par = np.asarray(mask_532_par)
     mask_532_per = np.asarray(mask_532_per)
@@ -68,7 +66,6 @@ def merged_feature_masks(mask_532_par, mask_532_per, mask_1064):
 
     #################################
     #### Create a composite mask ####
-    print("\t=> Create a composite mask from the 3 channel " "feature masks...")
 
     # Put 'flag_detect' and 'flag_low_confidence'
     flag_532_par = change_detection_values(mask_532_par)
@@ -157,8 +154,6 @@ def merged_feature_masks(mask_532_par, mask_532_per, mask_1064):
     # --------------------------------------------------------------------------
     # Bits 6: 532 nm perpendicular channel detection status %100000 = 32
     merged_mask[(flag_1064 == flag_detect) | (flag_1064 == flag_surface)] += 32
-
-    print(f"\t(Elapsed time: {datetime.now() - tic_function})")
 
     if template is None:
         return merged_mask
