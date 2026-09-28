@@ -10,8 +10,10 @@ from scipy.ndimage import convolve1d
 from twod_mcda.caliop.constants import (
     N_30M_BINS_PER_BIN_R1,
     N_30M_BINS_PER_BIN_R2,
+    N_30M_BINS_PER_BIN_R3,
     N_BINS_R1,
     N_BINS_R2,
+    N_LASER_PULSES_PER_1km,
 )
 from twod_mcda.parameters import (
     FLAG_AFA,
@@ -28,8 +30,13 @@ def remove_detect_from_sr(sr, feature):
     # NaN where not "nothing"
     return np.where(feature != FLAG_NOTHING, np.nan, sr)
 
-def average_below_8_2(sr, sr_sigma):
-    """Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)"""
+def average_below_8_2(sr, sr_sigma, first_profile):
+    """Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)
+
+    ``sr`` and ``sr_sigma`` are indexed (profile, altitude), altitude from
+    bottom to top; ``first_profile`` is the index, in its granule, of the first
+    profile, which aligns the averaging on the granule's 1 km profiles.
+    """
 
     # Initialization
     new_sr = sr.copy()
@@ -37,35 +44,31 @@ def average_below_8_2(sr, sr_sigma):
     nb_bins_below_8_2km = (
         N_30M_BINS_PER_BIN_R1 * N_BINS_R1 + N_30M_BINS_PER_BIN_R2 * N_BINS_R2
     )
+    block_h = N_LASER_PULSES_PER_1km  # 3 profiles of 333 m
+    block_v = N_30M_BINS_PER_BIN_R3  # 2 bins of 30 m
 
-    # Look for horizontal offset if 1st profile not the start of a 1-km profile
-    # (a missing value, NaN, is never equal to anything)
-    index_vertical_bin = 100  # random bin in the R2 region
-    if sr[0, index_vertical_bin] == sr[1, index_vertical_bin]:
-        if sr[1, index_vertical_bin] == sr[2, index_vertical_bin]:
-            offset_h = 0
-        else:
-            offset_h = 2
-    else:
-        offset_h = 1
+    # A granule holds whole 5 km frames, so its 1 km profiles start at the
+    # profile indexes that are multiples of 3
+    offset_h = -first_profile % block_h
 
-    # Average 60 m × 1 km (3 horizontals × 2 verticals); the profiles left over
-    # at both ends are not averaged
-    nb_blocks_h = len(range(offset_h, nb_prof - 2, 3))
-    rows = slice(offset_h, offset_h + 3 * nb_blocks_h)
+    # Average 60 m × 1 km; the profiles left over at both ends are not averaged
+    nb_blocks_h = (nb_prof - offset_h) // block_h
+    rows = slice(offset_h, offset_h + block_h * nb_blocks_h)
     nb_bins = min(nb_bins_below_8_2km, sr.shape[1])
-    paired = 2 * (nb_bins // 2)
-    new_sr[rows, :paired] = _mean_by_block(sr[rows, :paired], 3, 2)
+    paired = block_v * (nb_bins // block_v)
+    new_sr[rows, :paired] = _mean_by_block(sr[rows, :paired], block_h, block_v)
     if nb_bins > paired:
         # Profile truncated at an odd number of bins: last block 1 bin high
-        new_sr[rows, paired:nb_bins] = _mean_by_block(sr[rows, paired:nb_bins], 3, 1)
+        new_sr[rows, paired:nb_bins] = _mean_by_block(
+            sr[rows, paired:nb_bins], block_h, 1
+        )
 
     # Keep missing where was already missing
     new_sr[np.isnan(sr)] = np.nan
 
-    # Adapt SR threshold below 8.2 km
+    # Adapt SR threshold where averaged, below 8.2 km
     sr_sigma = sr_sigma.copy()
-    sr_sigma[:nb_bins_below_8_2km] = sr_sigma[:nb_bins_below_8_2km] / np.sqrt(6)
+    sr_sigma[rows, :nb_bins] = sr_sigma[rows, :nb_bins] / np.sqrt(block_h * block_v)
 
     return new_sr, sr_sigma
 

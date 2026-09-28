@@ -2,7 +2,7 @@
 
 #SBATCH --time=24:00:00
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=4G
+#SBATCH --mem=6G
 
 
 CONFIG_FILE="$1"
