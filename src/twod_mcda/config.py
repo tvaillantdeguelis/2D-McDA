@@ -71,7 +71,7 @@ def _resolve_max_altitude_km(max_altitude_km):
 def _altitude_index(max_altitude_km):
     """Map a maximum altitude in km to its regular 30 m grid index.
 
-    The lidar altitude grid (``lidar_data_altitudes.pkl``) is expanded to
+    The lidar altitude grid (``lidar_data_altitudes.npy``) is expanded to
     the regular 30 m vertical grid used by the reader, ordered bottom to
     top. The returned index is the number of grid bins at or below
     ``max_altitude_km``, suitable for slicing that grid as ``data[:index]``.

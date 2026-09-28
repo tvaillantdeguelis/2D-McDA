@@ -66,11 +66,12 @@ def _attributes(variable, dtype):
 def _storage_data(specification):
     """Convert xarray missing values to the variable's netCDF fill value."""
 
-    data = np.asanyarray(specification.data)
-    if specification.fill_value is not None:
-        data = np.ma.masked_equal(data, specification.fill_value)
-        if data.dtype.kind in {"f", "c"}:
-            data = np.ma.masked_invalid(data)
+    data = np.asarray(specification.data)
+    # Values already equal to the fill value are written as missing as they are
+    if specification.fill_value is not None and data.dtype.kind in {"f", "c"}:
+        data = np.where(np.isfinite(data), data, specification.fill_value).astype(
+            data.dtype, copy=False
+        )
     return data
 
 

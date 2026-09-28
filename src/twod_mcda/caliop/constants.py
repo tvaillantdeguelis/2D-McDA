@@ -1,8 +1,9 @@
 """Constants defined by CALIPSO/CALIOP products."""
 
-import pickle
 import re
 from pathlib import Path
+
+import numpy as np
 
 WAVELENGTH_532 = 532
 WAVELENGTH_1064 = 1064
@@ -71,11 +72,10 @@ N_333M_BINS_PER_BIN_R2 = 1
 N_333M_BINS_PER_BIN_R1 = 1
 
 LIDAR_ALTITUDES_FILE = (
-    Path(__file__).resolve().parent / "resources" / "lidar_data_altitudes.pkl"
+    Path(__file__).resolve().parent / "resources" / "lidar_data_altitudes.npy"
 )
 
-with LIDAR_ALTITUDES_FILE.open("rb") as file:
-    LIDAR_DATA_ALTITUDES = pickle.load(file)["Lidar_Data_Altitudes"]
+LIDAR_DATA_ALTITUDES = np.load(LIDAR_ALTITUDES_FILE)
 
 GRANULE_TIME_FMT = "%Y-%m-%dT%H-%M-%S"
 

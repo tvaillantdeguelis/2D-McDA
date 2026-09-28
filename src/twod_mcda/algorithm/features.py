@@ -27,7 +27,7 @@ from twod_mcda.parameters import (
     FeatureDetectionParameters,
     get_feature_detection_coef,
 )
-from twod_mcda.utils.arrays import as_masked_array
+from twod_mcda.utils.arrays import mask_invalid
 from twod_mcda.utils.timing import timer
 
 
@@ -70,8 +70,8 @@ class _DetectionHistory:
     def to_arrays(self, shape):
         """Stack every recorded state, leaving untouched steps at their default."""
 
-        features = np.ma.zeros((self._step + 1, *shape), dtype=np.uint8)
-        signals = np.ma.ones((self._step + 1, *shape)) * FILL_VALUE_FLOAT
+        features = np.zeros((self._step + 1, *shape), dtype=np.uint8)
+        signals = np.full((self._step + 1, *shape), FILL_VALUE_FLOAT)
         for step, values in self._features.items():
             features[step, :, :] = values
         for step, values in self._signals.items():
@@ -133,16 +133,18 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
     picking up weaker features than the previous one. Levels 1 to 4 run back to
     back; level 5 runs last, after the signal has been averaged and the fully
     attenuated columns have been flagged.
+
+    Every input is a plain array, with NaN where missing; the feature mask is a
+    uint8 array of flags.
     """
 
     # Get feature detection parameters
     params = FeatureDetectionParameters(channel)
 
     history = _DetectionHistory(
-        np.ma.copy(sr),
-        np.ma.zeros(sr.shape, dtype=np.uint8),
+        sr.copy(),
+        np.zeros(sr.shape, dtype=np.uint8),
     )
-    twoway_transmittance_array = np.ma.ones(sr.shape) * FILL_VALUE_FLOAT
 
     with timer("Put 'Surface' flag on feature mask"):
         history.feature = apply_surface_detection(history.feature, surf_alt_index)
@@ -176,7 +178,7 @@ def detect_features(sr, sr_sigma, b_mol, temperature, surf_alt_index, channel):
         "Correct sr signal below feature from transmittance using fixed lidar "
         f"ratio above and below {params.temp_ice_liquid} °C"
     ):
-        history.sr, twoway_transmittance_array[:, :] = transmission_correction(
+        history.sr, twoway_transmittance_array = transmission_correction(
             history.sr, sr, b_mol, history.feature, temperature, params
         )
 
@@ -265,11 +267,11 @@ def detect_features_in_channel(data, surface_indexes, channel):
 
     template = data[attenuated_name]
     mask, steps, ratio_steps, transmittance = detect_features(
-        as_masked_array(template / data[molecular_attenuated_name]),
-        as_masked_array(data[uncertainty_name]),
-        as_masked_array(data[molecular_name]),
-        as_masked_array(data["Temperature"]),
-        as_masked_array(surface_indexes),
+        mask_invalid(template / data[molecular_attenuated_name]).values,
+        mask_invalid(data[uncertainty_name]).values,
+        mask_invalid(data[molecular_name]).values,
+        mask_invalid(data["Temperature"]).values,
+        surface_indexes.values,
         channel,
     )
     base_coords = {
@@ -277,7 +279,7 @@ def detect_features_in_channel(data, surface_indexes, channel):
         "altitude": template.coords["altitude"],
     }
     detection_mask = xr.DataArray(
-        np.ma.asarray(mask).filled(0).astype(np.uint8, copy=False),
+        mask,
         dims=("profile", "altitude"),
         coords=base_coords,
         name=mask_name,
@@ -290,7 +292,7 @@ def detect_features_in_channel(data, surface_indexes, channel):
     development = xr.Dataset(
         {
             steps_name: xr.DataArray(
-                np.ma.asarray(steps).filled(0).astype(np.uint8, copy=False),
+                steps,
                 dims=(step_dimension, "profile", "altitude"),
                 coords=step_coords,
             ),
