@@ -5,6 +5,7 @@
 ### Changed
 
 - The windowing on the candidate pixels counts them with summed-area tables instead of looping over every pixel of the window, which makes the processing about 12 times faster with identical output.
+- The per-pixel loops of the attenuation correction and of the likely-artifact, fully-attenuated, and weak-signal flagging are compiled with Numba, which halves the remaining processing time with identical output.
 
 ## [2.11.0] - 2026-09-28
 
