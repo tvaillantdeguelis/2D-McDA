@@ -9,7 +9,7 @@ from twod_mcda.caliop.physics import (
     rms_from_P_domain_to_betap_domain,
 )
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
-from twod_mcda.utils.arrays import as_masked_array
+from twod_mcda.utils.arrays import mask_invalid
 from twod_mcda.parameters import SurfaceDetectionParameters
 from twod_mcda.utils.timing import timer
 
@@ -52,6 +52,16 @@ def compute_deriv(ab, alt):
     return (ab[:, :-1] - ab[:, 1:]) / (alt[np.newaxis, :-1] - alt[np.newaxis, 1:])
 
 
+def _nanargmin(values):
+    """Index of the minimum, ignoring missing values (0 if all are missing)."""
+    return np.argmin(np.where(np.isnan(values), np.inf, values))
+
+
+def _nanargmax(values):
+    """Index of the maximum, ignoring missing values (0 if all are missing)."""
+    return np.argmax(np.where(np.isnan(values), -np.inf, values))
+
+
 def get_min_max_deriv(deriv, alt, min_index_search_region, max_index_search_region):
     """Get the altitudes of the minimum and maximum values of the derivatives in
     the surface search region, and their respective bin index"""
@@ -71,8 +81,8 @@ def get_min_max_deriv(deriv, alt, min_index_search_region, max_index_search_regi
         max_index = max_index_search_region[i_prof] + 1
 
         # Get indexes of min and max derivative in search region
-        i_min[i_prof] = np.argmin(deriv[i_prof, min_index:max_index]) + min_index
-        i_max[i_prof] = np.argmax(deriv[i_prof, min_index:max_index]) + min_index
+        i_min[i_prof] = _nanargmin(deriv[i_prof, min_index:max_index]) + min_index
+        i_max[i_prof] = _nanargmax(deriv[i_prof, min_index:max_index]) + min_index
 
         # Get corresponding altitude
         alt_min[i_prof] = alt[i_min[i_prof]]
@@ -96,11 +106,13 @@ def get_max_ab_signal(ab, i_min, i_max):
         min_index = np.min((i_min[i], i_max[i]))
         max_index = np.max((i_min[i], i_max[i]))
 
-        # Get the maximum signal magnitude
-        ab_max[i] = np.max(ab[i, min_index : max_index + 1])
-
-        # Get corresponding index
-        ab_argmax[i] = np.argmax(ab[i, min_index : max_index + 1]) + min_index
+        # Get the maximum signal magnitude, missing if no valid signal
+        ab_region = ab[i, min_index : max_index + 1]
+        ab_argmax[i] = _nanargmax(ab_region) + min_index
+        if not np.all(np.isnan(ab_region)):
+            ab_max[i] = ab[i, int(ab_argmax[i])]
+        else:
+            ab_max[i] = np.nan
 
     return ab_max, ab_argmax
 
@@ -265,47 +277,51 @@ def detect_surface(
 def detect_surface_in_channel(data, channel):
     """Return the detected surface indexes for one lidar channel."""
 
+    def values(name):
+        # The detection works on plain arrays, with NaN where missing
+        return mask_invalid(data[name]).values
+
     common = (
-        as_masked_array(data["IGBP_Surface_Type"]),
-        as_masked_array(data["Surface_Elevation"]),
-        as_masked_array(data["Spacecraft_Altitude"]),
-        as_masked_array(data["Lidar_Data_Altitudes"]),
+        values("IGBP_Surface_Type"),
+        values("Surface_Elevation"),
+        values("Spacecraft_Altitude"),
+        values("Lidar_Data_Altitudes"),
     )
 
     if channel == "532_par":
         surface_indexes = detect_surface(
-            as_masked_array(data["Parallel_Attenuated_Backscatter_532"]),
+            values("Parallel_Attenuated_Backscatter_532"),
             *common,
-            as_masked_array(data["Parallel_RMS_Baseline_532"]),
-            as_masked_array(data["Laser_Energy_532"]),
-            as_masked_array(data["Calibration_Constant_532"]),
+            values("Parallel_RMS_Baseline_532"),
+            values("Laser_Energy_532"),
+            values("Calibration_Constant_532"),
             1,
-            as_masked_array(data["Parallel_Amplifier_Gain_532"]),
-            as_masked_array(data["Off_Nadir_Angle"]),
+            values("Parallel_Amplifier_Gain_532"),
+            values("Off_Nadir_Angle"),
             "532_par",
         )
     elif channel == "532_per":
         surface_indexes = detect_surface(
-            as_masked_array(data["Perpendicular_Attenuated_Backscatter_532"]),
+            values("Perpendicular_Attenuated_Backscatter_532"),
             *common,
-            as_masked_array(data["Perpendicular_RMS_Baseline_532"]),
-            as_masked_array(data["Laser_Energy_532"]),
-            as_masked_array(data["Calibration_Constant_532"]),
-            as_masked_array(data["Depolarization_Gain_Ratio_532"]),
-            as_masked_array(data["Perpendicular_Amplifier_Gain_532"]),
-            as_masked_array(data["Off_Nadir_Angle"]),
+            values("Perpendicular_RMS_Baseline_532"),
+            values("Laser_Energy_532"),
+            values("Calibration_Constant_532"),
+            values("Depolarization_Gain_Ratio_532"),
+            values("Perpendicular_Amplifier_Gain_532"),
+            values("Off_Nadir_Angle"),
             "532_per",
         )
     elif channel == "1064":
         surface_indexes = detect_surface(
-            as_masked_array(data["Attenuated_Backscatter_1064"]),
+            values("Attenuated_Backscatter_1064"),
             *common,
-            as_masked_array(data["RMS_Baseline_1064"]),
-            as_masked_array(data["Laser_Energy_1064"]),
-            as_masked_array(data["Calibration_Constant_1064"]),
+            values("RMS_Baseline_1064"),
+            values("Laser_Energy_1064"),
+            values("Calibration_Constant_1064"),
             1,
-            as_masked_array(data["Amplifier_Gain_1064"]),
-            as_masked_array(data["Off_Nadir_Angle"]),
+            values("Amplifier_Gain_1064"),
+            values("Off_Nadir_Angle"),
             "1064",
         )
     else:

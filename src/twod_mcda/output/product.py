@@ -286,10 +286,10 @@ def output_filename(request, result):
 
 
 def _valid_values(values):
-    values = np.ma.asarray(values)
-    values = np.ma.masked_invalid(values)
-    values = np.ma.masked_equal(values, FILL_VALUE_FLOAT)
-    return values.compressed()
+    """Return the finite values that are not the fill value, flattened."""
+
+    values = np.asarray(values)
+    return values[np.isfinite(values) & (values != FILL_VALUE_FLOAT)]
 
 
 def _utc_datetime(value):

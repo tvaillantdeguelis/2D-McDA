@@ -8,7 +8,6 @@ import numpy as np
 from scipy.ndimage import convolve1d
 
 from twod_mcda.caliop.constants import (
-    FILL_VALUE_FLOAT,
     N_30M_BINS_PER_BIN_R1,
     N_30M_BINS_PER_BIN_R2,
     N_BINS_R1,
@@ -20,29 +19,27 @@ from twod_mcda.parameters import (
     FLAG_LIKELY_ARTIFACT,
     FLAG_NOTHING,
     FLAG_SMALL_STRIPS,
-    FLAG_SURFACE,
 )
 
 
 def remove_detect_from_sr(sr, feature):
     """Remove detected pixel from the ATSR signal"""
 
-    # Mask where not "nothing"
-    new_sr = np.ma.masked_where(feature != FLAG_NOTHING, sr)
-
-    return new_sr
+    # NaN where not "nothing"
+    return np.where(feature != FLAG_NOTHING, np.nan, sr)
 
 def average_below_8_2(sr, sr_sigma):
     """Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)"""
 
     # Initialization
-    new_sr = np.ma.copy(sr)
+    new_sr = sr.copy()
     nb_prof = sr.shape[0]
     nb_bins_below_8_2km = (
         N_30M_BINS_PER_BIN_R1 * N_BINS_R1 + N_30M_BINS_PER_BIN_R2 * N_BINS_R2
     )
 
     # Look for horizontal offset if 1st profile not the start of a 1-km profile
+    # (a missing value, NaN, is never equal to anything)
     index_vertical_bin = 100  # random bin in the R2 region
     if sr[0, index_vertical_bin] == sr[1, index_vertical_bin]:
         if sr[1, index_vertical_bin] == sr[2, index_vertical_bin]:
@@ -52,21 +49,47 @@ def average_below_8_2(sr, sr_sigma):
     else:
         offset_h = 1
 
-    # Average 60 m × 1 km (2 verticals × 3 horizontals)
-    i_array = np.arange(offset_h, nb_prof - 2, 3)  # 3 horizontals
-    j_array = np.arange(0, nb_bins_below_8_2km, 2)  # 2 verticals
-    i_progress = 0
-    for i in i_array:
-        for j in j_array:
-            new_sr[i : i + 3, j : j + 2] = np.ma.mean(sr[i : i + 3, j : j + 2])
+    # Average 60 m × 1 km (3 horizontals × 2 verticals); the profiles left over
+    # at both ends are not averaged
+    nb_blocks_h = len(range(offset_h, nb_prof - 2, 3))
+    rows = slice(offset_h, offset_h + 3 * nb_blocks_h)
+    nb_bins = min(nb_bins_below_8_2km, sr.shape[1])
+    paired = 2 * (nb_bins // 2)
+    new_sr[rows, :paired] = _mean_by_block(sr[rows, :paired], 3, 2)
+    if nb_bins > paired:
+        # Profile truncated at an odd number of bins: last block 1 bin high
+        new_sr[rows, paired:nb_bins] = _mean_by_block(sr[rows, paired:nb_bins], 3, 1)
 
-    # Remask where was already masked
-    new_sr.mask = np.copy(sr.mask)
+    # Keep missing where was already missing
+    new_sr[np.isnan(sr)] = np.nan
 
     # Adapt SR threshold below 8.2 km
+    sr_sigma = sr_sigma.copy()
     sr_sigma[:nb_bins_below_8_2km] = sr_sigma[:nb_bins_below_8_2km] / np.sqrt(6)
 
     return new_sr, sr_sigma
+
+def _mean_by_block(values, block_height, block_width):
+    """Spread over each block the mean of its non-missing values.
+
+    ``values`` is tiled by blocks of ``block_height`` rows × ``block_width``
+    columns; a block without any valid value stays missing (NaN).
+    """
+
+    nb_rows = values.shape[0] // block_height
+    nb_cols = values.shape[1] // block_width
+    # Gather each block's pixels in row order along a last axis
+    blocks = (
+        values.reshape(nb_rows, block_height, nb_cols, block_width)
+        .transpose(0, 2, 1, 3)
+        .reshape(nb_rows, nb_cols, block_height * block_width)
+    )
+    valid = ~np.isnan(blocks)
+    count = valid.sum(axis=-1)
+    total = np.where(valid, blocks, 0.0).sum(axis=-1)
+    mean = np.full(total.shape, np.nan)
+    np.divide(total * 1.0, count, out=mean, where=count > 0)
+    return np.repeat(np.repeat(mean, block_height, axis=0), block_width, axis=1)
 
 def gaussian_2d_window(
     width_window,
@@ -80,9 +103,8 @@ def gaussian_2d_window(
     """Apply a 2-D gaussian averaging window to the AB signal"""
 
     # Initialization
-    ab2 = np.ma.asarray(ab_signal).filled(FILL_VALUE_FLOAT).astype(float, copy=False)
-    new_ab = np.full(ab_signal.shape, FILL_VALUE_FLOAT, dtype=float)
-    copy_feature = np.ma.asarray(feature).filled(FLAG_SURFACE)
+    ab2 = np.asarray(ab_signal, dtype=float)
+    new_ab = np.full(ab_signal.shape, np.nan)
 
     # width_window should be odd numbers
     if width_window % 2 != 1:
@@ -97,10 +119,10 @@ def gaussian_2d_window(
     vertical_gaussian = np.exp(-(y**2) / (2 * vertical_gauss_sigma**2))
     nb_prof_averaged = np.sum(np.outer(horizontal_gaussian, vertical_gaussian))
 
-    # Normalize by the locally available Gaussian weights so masked samples do
+    # Normalize by the locally available Gaussian weights so missing samples do
     # not reduce the average. The 2-D Gaussian is separable, hence two 1-D
     # convolutions give the same result at a much lower cost.
-    valid = ab2 != FILL_VALUE_FLOAT
+    valid = ~np.isnan(ab2)
     weighted_signal = np.where(valid, ab2, 0.0)
     numerator = convolve1d(
         weighted_signal,
@@ -132,10 +154,10 @@ def gaussian_2d_window(
     )
 
     special = (
-        (copy_feature == FLAG_FA)
-        | (copy_feature == FLAG_AFA)
-        | (copy_feature == FLAG_LIKELY_ARTIFACT)
-        | (copy_feature == FLAG_SMALL_STRIPS)
+        (feature == FLAG_FA)
+        | (feature == FLAG_AFA)
+        | (feature == FLAG_LIKELY_ARTIFACT)
+        | (feature == FLAG_SMALL_STRIPS)
     )
     eligible = (valid | special) & (denominator != 0)
     if h_nside:
@@ -144,10 +166,9 @@ def gaussian_2d_window(
     if v_nside:
         eligible[:, :v_nside] = False
         eligible[:, -v_nside:] = False
+    # Missing (NaN) where not eligible
     np.divide(numerator, denominator, out=new_ab, where=eligible)
 
-    # Mask where FILL_VALUE_FLOAT
-    new_ab = np.ma.masked_where(new_ab == FILL_VALUE_FLOAT, new_ab)
     # Adapt SR threshold
     ab_sigma = ab_sigma / np.sqrt(nb_prof_averaged)
 

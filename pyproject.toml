@@ -19,7 +19,7 @@ where = ["src"]
 
 
 [tool.setuptools.package-data]
-twod_mcda = ["caliop/resources/lidar_data_altitudes.pkl"]
+twod_mcda = ["caliop/resources/lidar_data_altitudes.npy"]
 
 
 [tool.setuptools.dynamic]

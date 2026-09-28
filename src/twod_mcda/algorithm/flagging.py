@@ -24,7 +24,7 @@ def apply_surface_detection(feature, surf_alt_index):
 
     # Initialization
     nb_prof = feature.shape[0]
-    new_feature = np.ma.copy(feature)
+    new_feature = feature.copy()
 
     # Loop on profiles
     for i in np.arange(nb_prof):
@@ -39,19 +39,18 @@ def apply_threshold(k, feature, sr, sr_sigma, where_FA=False):
     """Put FLAG_MAYBE where signal above threshold"""
 
     # Initialization
-    new_feature = np.ma.copy(feature)
+    new_feature = feature.copy()
 
     # Define threshold
     sr_maybe = 1 + k * sr_sigma
 
+    # A missing ATSR (NaN) is never above the threshold
     if where_FA:
-        # Put flag where ATSR > threshold and where ATSR is not masked
-        new_feature[np.ma.where(sr > sr_maybe)] = FLAG_MAYBE
+        # Put flag where ATSR > threshold
+        new_feature[sr > sr_maybe] = FLAG_MAYBE
     else:
         # Put flag where ATSR > threshold and where feature is still "nothing"
-        new_feature[np.ma.where((sr > sr_maybe) & (new_feature == FLAG_NOTHING))] = (
-            FLAG_MAYBE
-        )
+        new_feature[(sr > sr_maybe) & (new_feature == FLAG_NOTHING)] = FLAG_MAYBE
 
     return new_feature
 
@@ -61,7 +60,7 @@ def fill_likely_artifact(params, feature, FLAG_VERY_HIGH_ECHO):
     # Initialization
     nb_alt = feature.shape[1]
     nb_prof = feature.shape[0]
-    new_feature = np.ma.copy(feature)
+    new_feature = feature.copy()
 
     # Loop on profiles
     for i in range(nb_prof):
@@ -97,7 +96,7 @@ def fill_fully_attenuated(feature):
     # Initialization
     nb_prof = feature.shape[0]
     nb_alt = feature.shape[1]
-    new_feature = np.ma.copy(feature)
+    new_feature = feature.copy()
 
     # Loop on profiles
     for i in np.arange(nb_prof):
@@ -134,7 +133,7 @@ def FLAG_WEAK_SIGNAL(params, feature, sr, sr_sigma):
     sr_thresold = sr_sigma * params.weak_signal_ratio_threshold
     nb_prof = feature.shape[0]
     nb_alt = feature.shape[1]
-    new_feature = np.ma.copy(feature)
+    new_feature = feature.copy()
 
     # Loop on profiles
     for i in np.arange(nb_prof):

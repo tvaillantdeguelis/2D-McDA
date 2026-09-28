@@ -2,8 +2,8 @@
 
 These decide whether a pixel belongs to a real structure by looking at the
 pixels around it: windowing, connected patterns of candidate pixels, and small
-horizontal strips. Each one pairs a masked-array wrapper with a Numba kernel,
-which is why the mask has to be converted through ``feature_for_numba`` first.
+horizontal strips. Each one pairs a wrapper with a Numba kernel, which works
+in place on a copy of the mask.
 """
 
 import numpy as np
@@ -19,15 +19,6 @@ from twod_mcda.parameters import (
     FLAG_SURFACE,
 )
 
-
-def feature_for_numba(feature):
-    mask = np.ma.getmaskarray(feature)
-    data = np.asarray(np.ma.getdata(feature)).copy()
-
-    # Empêche Numba de traiter les pixels masqués.
-    data[mask] = FLAG_SURFACE
-
-    return data, mask
 
 @jit(nopython=True)
 def apply_window_jit(
@@ -107,7 +98,7 @@ def apply_window(
     # min_percent: min pourcentage of total counted pixels in the window to flag the center as "detected"
 
     # Initialization
-    new_feature, feature_mask = feature_for_numba(feature)
+    new_feature = feature.copy()
 
     # height_window and width_window should be odd numbers
     if (height_window % 2 != 1) | (width_window % 2 != 1):
@@ -139,7 +130,7 @@ def apply_window(
     # Replace by those which result from the windowing
     new_feature[detected_pixels == 1] = FLAG_MAYBE
 
-    return np.ma.array(new_feature, mask=feature_mask)
+    return new_feature
 
 @jit(nopython=True)
 def replace_maybe_jit(
@@ -250,9 +241,7 @@ def replace_maybe(
     if prevprev_detect=True means that we also count detection pixels n-2"""
 
     # Initialization
-    new_feature, feature_mask = feature_for_numba(feature)
-
-    # Initialization
+    new_feature = feature.copy()
     seen_pixels = np.zeros(new_feature.shape, dtype=bool)
 
     # Look for a "maybe" pixel and decide if it's really part of a pattern
@@ -269,7 +258,7 @@ def replace_maybe(
             prevprev_detect,
         )
 
-    return np.ma.array(new_feature, mask=feature_mask)
+    return new_feature
 
 @jit(nopython=True)
 def fill_small_strips_jit(feature, nb_prof_min):
@@ -323,19 +312,7 @@ def fill_small_strips_jit(feature, nb_prof_min):
 def fill_small_strips(params, feature):
     """Flag short horizontal strips between low-confidence regions."""
 
-    feature_mask = np.ma.getmaskarray(feature)
-
-    new_feature = np.asarray(np.ma.getdata(feature)).copy()
-
-    # Valeur exclue des traitements dans la fonction JIT.
-    new_feature[feature_mask] = FLAG_SURFACE
-
-    new_feature = fill_small_strips_jit(
-        new_feature,
+    return fill_small_strips_jit(
+        feature.copy(),
         params.nb_prof_min_small_strips,
-    )
-
-    return np.ma.array(
-        new_feature,
-        mask=feature_mask,
     )

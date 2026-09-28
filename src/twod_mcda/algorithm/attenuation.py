@@ -2,16 +2,16 @@
 
 import numpy as np
 
-from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
 from twod_mcda.parameters import FLAG_FA, FLAG_NOTHING, FLAG_SURFACE
 
 
 def transmission_correction(sr, sr_init, b_mol, feature, temperature, params):
     """Correct sr signal below feature from transmittance"""
 
-    # Initialization
-    new_sr = np.ma.copy(sr)
-    twoway_transmittance_array = np.ma.ones(feature.shape) * FILL_VALUE_FLOAT
+    # Initialization; a missing value (NaN) met in a layer makes the
+    # transmittance, hence the corrected signal below, missing too
+    new_sr = sr.copy()
+    twoway_transmittance_array = np.full(feature.shape, np.nan)
     nb_alt = new_sr.shape[1]
     nb_prof = new_sr.shape[0]
 
@@ -48,7 +48,7 @@ def transmission_correction(sr, sr_init, b_mol, feature, temperature, params):
                 # Correct from transmission of layers above
                 new_sr[i, j] = (
                     new_sr[i, j] / twoway_transmittance
-                )  # masked value not affected
+                )  # missing value not affected
 
             elif (feature[i, j] == FLAG_SURFACE) | (feature[i, j] == FLAG_FA):
                 break
@@ -66,9 +66,5 @@ def transmission_correction(sr, sr_init, b_mol, feature, temperature, params):
                 )
                 reenter_nothing = True
 
-    # Mask where feature
-    twoway_transmittance_array = np.ma.masked_where(
-        twoway_transmittance_array == FILL_VALUE_FLOAT, twoway_transmittance_array
-    )
-
+    # Missing (NaN) where feature
     return new_sr, twoway_transmittance_array

@@ -41,15 +41,25 @@ def _block_average(data, block_size, axis, start=0):
         return data
 
     length = data.shape[axis]
-    averaged = np.ma.copy(data)
+    averaged = data.copy()
     for block_start in range(start, length - block_size + 1, block_size):
         block = slice(block_start, block_start + block_size)
         indexer = [slice(None), slice(None)]
         indexer[axis] = block
-        mean = np.ma.mean(data[tuple(indexer)], axis=axis, keepdims=True)
-        averaged[tuple(indexer)] = np.ma.repeat(mean, block_size, axis=axis)
+        mean = _mean_ignoring_missing(data[tuple(indexer)], axis)
+        averaged[tuple(indexer)] = np.repeat(mean, block_size, axis=axis)
 
     return averaged
+
+
+def _mean_ignoring_missing(values, axis):
+    """Mean of the non-missing values along an axis, NaN where all are missing."""
+
+    valid = ~np.isnan(values)
+    count = valid.sum(axis=axis, keepdims=True)
+    total = np.where(valid, values, 0).sum(axis=axis, keepdims=True)
+    with np.errstate(invalid="ignore"):
+        return total / count
 
 
 def coarsen(data, vertical_resolution, horizontal_resolution, profile_min):
@@ -59,7 +69,7 @@ def coarsen(data, vertical_resolution, horizontal_resolution, profile_min):
     Blocks that the array does not hold in full, at the top of the profile or
     past the last chunk boundary, are left at their native resolution.
 
-    :param data: 2D masked array indexed (profile, altitude)
+    :param data: 2D float array indexed (profile, altitude), NaN where missing
     :param vertical_resolution: '30m', '60m' or '180m'
     :param horizontal_resolution: '333m', '1km' or '5km'
     :param profile_min: granule-wide index of the first profile of ``data``,

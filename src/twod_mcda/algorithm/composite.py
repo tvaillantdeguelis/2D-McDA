@@ -7,8 +7,6 @@ from datetime import datetime
 import numpy as np
 import xarray as xr
 
-from twod_mcda.utils.arrays import as_masked_array
-
 # Global variables
 flag_nothing = 0
 # flag_detection_level = 1, 2,... for each level of detection
@@ -29,7 +27,7 @@ def change_detection_values(mask):
     Put 'flag_likely_artifact', 'flag_AFA', and 'flag_small_strips' to
     'flag_low_confidence'"""
 
-    new_mask = np.ma.copy(mask)
+    new_mask = mask.copy()
 
     # Put 'flag_detect'
     new_mask[(new_mask >= 1) & (new_mask <= max_flag_detect)] = flag_detect
@@ -52,9 +50,9 @@ def merged_feature_masks(mask_532_par, mask_532_per, mask_1064):
 
     tic_function = datetime.now()
     template = mask_532_par if isinstance(mask_532_par, xr.DataArray) else None
-    mask_532_par = as_masked_array(mask_532_par)
-    mask_532_per = as_masked_array(mask_532_per)
-    mask_1064 = as_masked_array(mask_1064)
+    mask_532_par = np.asarray(mask_532_par)
+    mask_532_per = np.asarray(mask_532_per)
+    mask_1064 = np.asarray(mask_1064)
 
     # Check if flag values not declared in global variables
     if not np.all(
