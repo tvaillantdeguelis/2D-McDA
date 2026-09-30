@@ -20,6 +20,11 @@ from twod_mcda.caliop.constants import (
     N_BINS_R3,
     N_BINS_R4,
     N_BINS_R5,
+    N_333M_BINS_PER_BIN_R1,
+    N_333M_BINS_PER_BIN_R2,
+    N_333M_BINS_PER_BIN_R3,
+    N_333M_BINS_PER_BIN_R4,
+    N_333M_BINS_PER_BIN_R5,
     N_LASER_PULSES_PER_5km,
 )
 
@@ -106,6 +111,74 @@ def regular_30m_grid_native_bins(reverse_altitude=True):
         native_bins = native_bins[::-1]
 
     return native_bins
+
+
+def regular_30m_grid_native_sample_sizes(wl, reverse_altitude=True):
+    """
+    Return, for each level of the regular 30 m grid, the size of the native CALIOP
+    sample it belongs to: vertically in 30 m bins, horizontally in 333 m profiles.
+
+    Averaging a block of the regular grid only divides the noise by the number of
+    *native* samples it holds, not by its number of levels: above 20.2 km, for
+    instance, one downlinked bin already spans 180 m, and below 8.2 km at 1064 nm
+    the downlinked resolution is 60 m, so two consecutive 30 m levels carry the
+    same measurement.
+
+    reverse_altitude: if True, list the levels from bottom to top
+    """
+
+    # Regions from top (R5) to bottom (R1), as the native bins are ordered
+    regions = (
+        (N_BINS_R5, N_30M_BINS_PER_BIN_R5, N_333M_BINS_PER_BIN_R5),
+        (N_BINS_R4, N_30M_BINS_PER_BIN_R4, N_333M_BINS_PER_BIN_R4),
+        (N_BINS_R3, N_30M_BINS_PER_BIN_R3, N_333M_BINS_PER_BIN_R3),
+        (N_BINS_R2, N_30M_BINS_PER_BIN_R2, N_333M_BINS_PER_BIN_R2),
+        (N_BINS_R1, N_30M_BINS_PER_BIN_R1, N_333M_BINS_PER_BIN_R1),
+    )
+
+    vertical_sizes = []
+    horizontal_sizes = []
+    for nb_bins, nb_30m_bins_per_bin, nb_333m_bins_per_bin in regions:
+        nb_levels = nb_bins * nb_30m_bins_per_bin
+        vertical_sizes.append(np.full(nb_levels, nb_30m_bins_per_bin))
+        horizontal_sizes.append(np.full(nb_levels, nb_333m_bins_per_bin))
+    vertical_size = np.concatenate(vertical_sizes)
+    horizontal_size = np.concatenate(horizontal_sizes)
+
+    if wl == 1064:
+        # The 1064 nm signal is downlinked at 60 m below 8.2 km, then split into
+        # two 30 m bins (see Table 2 of Liu et al., 2011)
+        r2_start = N_BINS_R5 * N_30M_BINS_PER_BIN_R5 + N_BINS_R4 * N_30M_BINS_PER_BIN_R4
+        r2_start += N_BINS_R3 * N_30M_BINS_PER_BIN_R3
+        r2_stop = r2_start + N_BINS_R2 * N_30M_BINS_PER_BIN_R2
+        vertical_size[r2_start:r2_stop] *= 2
+    elif wl != 532:
+        raise ValueError(f"Unrecognized wavelength: {wl}; use 532 or 1064 instead")
+
+    if reverse_altitude:
+        vertical_size = vertical_size[::-1]
+        horizontal_size = horizontal_size[::-1]
+
+    return vertical_size, horizontal_size
+
+
+def first_regular_30m_level_of_region_4(reverse_altitude=True):
+    """
+    Return the index, on the regular 30 m grid, of the lowest level of region 4
+    (20.2 km), the region CALIOP downlinks at 180 m.
+
+    reverse_altitude: if True, index the grid from bottom to top
+    """
+
+    below_region_4 = (
+        N_BINS_R1 * N_30M_BINS_PER_BIN_R1
+        + N_BINS_R2 * N_30M_BINS_PER_BIN_R2
+        + N_BINS_R3 * N_30M_BINS_PER_BIN_R3
+    )
+    if reverse_altitude:
+        return below_region_4
+
+    return get_nb_regular_30m_vertical_levels() - below_region_4 - 1
 
 
 def shape_to_regular_30m_vertical_grid(

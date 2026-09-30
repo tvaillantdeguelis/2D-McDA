@@ -18,7 +18,7 @@ from twod_mcda.algorithm.morphology import (
     replace_maybe,
 )
 from twod_mcda.algorithm.smoothing import (
-    average_below_8_2,
+    average_to_5km_180m,
     gaussian_2d_window,
     remove_detect_from_sr,
 )
@@ -103,9 +103,9 @@ def _apply_detection_level(history, level, channel, sr_sigma, params):
         return sr_sigma
 
     if a is not None:
-        # Apply a gaussian horizontal line window averaging
+        # Apply a gaussian 2-D window averaging
         history.sr, sr_sigma = gaussian_2d_window(
-            a[0], a[1], history.sr, history.feature, sr_sigma
+            a[0], a[1], history.sr, history.feature, sr_sigma, a[2], a[3]
         )
 
     # Apply threshold (at level 1, to get very high echo, likely PMT artifact)
@@ -169,9 +169,11 @@ def detect_features(
     history.feature = fill_fully_attenuated(history.feature)
     history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    # Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)
-    # Note: sr_sigma needs to be modified below 8.2 km
-    history.sr, sr_sigma = average_below_8_2(history.sr, sr_sigma, first_profile)
+    # Bring the whole profile to the coarsest CALIOP resolution (5 km × 180 m)
+    # Note: sr_sigma is lowered accordingly, by altitude
+    history.sr, sr_sigma = average_to_5km_180m(
+        history.sr, sr_sigma, first_profile, channel
+    )
 
     # Flag 'almost FA' where lidar signal is very weak
     history.feature = FLAG_WEAK_SIGNAL(params, history.feature, history.sr, sr_sigma)

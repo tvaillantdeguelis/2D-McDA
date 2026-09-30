@@ -8,12 +8,12 @@ import numpy as np
 from scipy.ndimage import convolve1d
 
 from twod_mcda.caliop.constants import (
-    N_30M_BINS_PER_BIN_R1,
-    N_30M_BINS_PER_BIN_R2,
-    N_30M_BINS_PER_BIN_R3,
-    N_BINS_R1,
-    N_BINS_R2,
-    N_LASER_PULSES_PER_1km,
+    N_30M_BINS_PER_BIN_R4,
+    N_LASER_PULSES_PER_5km,
+)
+from twod_mcda.caliop.grids import (
+    first_regular_30m_level_of_region_4,
+    regular_30m_grid_native_sample_sizes,
 )
 from twod_mcda.parameters import (
     FLAG_AFA,
@@ -30,47 +30,84 @@ def remove_detect_from_sr(sr, feature):
     # NaN where not "nothing"
     return np.where(feature != FLAG_NOTHING, np.nan, sr)
 
-def average_below_8_2(sr, sr_sigma, first_profile):
-    """Average below 8.2 km as between 8.2 km and 20.2 km (60 m × 1 km)
+def average_to_5km_180m(sr, sr_sigma, first_profile, channel):
+    """Average the whole profile to 5 km × 180 m, the coarsest CALIOP resolution.
 
     ``sr`` and ``sr_sigma`` are indexed (profile, altitude), altitude from
     bottom to top; ``first_profile`` is the index, in its granule, of the first
-    profile, which aligns the averaging on the granule's 1 km profiles.
+    profile, which aligns the averaging on the granule's 5 km frames.
+
+    The horizontal blocks hold ``N_LASER_PULSES_PER_5km`` profiles and are
+    aligned on those frames, so that a block never straddles two of the 5 km
+    frames the Level 1 product is built from. The vertical blocks hold 180 m and
+    are anchored on the native bins of region 4, which CALIOP already downlinks
+    at 180 m: a block there covers exactly one native bin instead of mixing two.
     """
 
     # Initialization
     new_sr = sr.copy()
-    nb_prof = sr.shape[0]
-    nb_bins_below_8_2km = (
-        N_30M_BINS_PER_BIN_R1 * N_BINS_R1 + N_30M_BINS_PER_BIN_R2 * N_BINS_R2
-    )
-    block_h = N_LASER_PULSES_PER_1km  # 3 profiles of 333 m
-    block_v = N_30M_BINS_PER_BIN_R3  # 2 bins of 30 m
+    nb_prof, nb_bins = sr.shape
+    block_h = N_LASER_PULSES_PER_5km  # 15 profiles of 333 m = 5 km
+    block_v = N_30M_BINS_PER_BIN_R4  # 6 bins of 30 m = 180 m
 
-    # A granule holds whole 5 km frames, so its 1 km profiles start at the
-    # profile indexes that are multiples of 3
+    # A granule holds whole 5 km frames, so its frames start at the profile
+    # indexes that are multiples of 15
     offset_h = -first_profile % block_h
 
-    # Average 60 m × 1 km; the profiles left over at both ends are not averaged
+    # Average 180 m × 5 km; the profiles left over at both ends are not averaged
     nb_blocks_h = (nb_prof - offset_h) // block_h
     rows = slice(offset_h, offset_h + block_h * nb_blocks_h)
-    nb_bins = min(nb_bins_below_8_2km, sr.shape[1])
-    paired = block_v * (nb_bins // block_v)
-    new_sr[rows, :paired] = _mean_by_block(sr[rows, :paired], block_h, block_v)
-    if nb_bins > paired:
-        # Profile truncated at an odd number of bins: last block 1 bin high
-        new_sr[rows, paired:nb_bins] = _mean_by_block(
-            sr[rows, paired:nb_bins], block_h, 1
+    for start, stop in _vertical_blocks(nb_bins, block_v):
+        new_sr[rows, start:stop] = _mean_by_block(
+            sr[rows, start:stop], block_h, stop - start
         )
 
     # Keep missing where was already missing
     new_sr[np.isnan(sr)] = np.nan
 
-    # Adapt SR threshold where averaged, below 8.2 km
+    # Adapt SR threshold where averaged; only the native samples of a block are
+    # independent, and how many it holds depends on the altitude
     sr_sigma = sr_sigma.copy()
-    sr_sigma[rows, :nb_bins] = sr_sigma[rows, :nb_bins] / np.sqrt(block_h * block_v)
+    nb_averaged = _nb_independent_samples(channel, block_h, block_v, nb_bins)
+    sr_sigma[rows, :] = sr_sigma[rows, :] / np.sqrt(nb_averaged)
 
     return new_sr, sr_sigma
+
+def _vertical_blocks(nb_bins, block_v):
+    """Yield the (start, stop) bounds of every 180 m block of a profile.
+
+    The blocks are anchored on the native 180 m bins of region 4, so the levels
+    left over below the first and above the last whole block form a shorter
+    block of their own rather than being dropped.
+    """
+
+    offset_v = min(first_regular_30m_level_of_region_4() % block_v, nb_bins)
+    nb_blocks_v = max((nb_bins - offset_v) // block_v, 0)
+    paired_end = offset_v + block_v * nb_blocks_v
+
+    if offset_v:
+        yield 0, offset_v
+    for start in range(offset_v, paired_end, block_v):
+        yield start, start + block_v
+    if nb_bins > paired_end:
+        yield paired_end, nb_bins
+
+def _nb_independent_samples(channel, block_h, block_v, nb_bins):
+    """Number of independent native samples inside one averaging block.
+
+    Returns one value per altitude level, as a block holds as many native
+    samples as the downlinked resolution allows at that altitude: 90 below
+    8.2 km at 532 nm, 45 there at 1064 nm (downlinked at 60 m), 15 between
+    8.2 km and 20.2 km, 3 between 20.2 km and 30.1 km, and 1 above, where one
+    native sample already spans more than 5 km × 180 m.
+    """
+
+    wl = 1064 if channel == "1064" else 532
+    native_v, native_h = regular_30m_grid_native_sample_sizes(wl)
+    nb_bins_averaged = np.maximum(block_v // native_v[:nb_bins], 1)
+    nb_shots_averaged = np.maximum(block_h // native_h[:nb_bins], 1)
+
+    return nb_bins_averaged * nb_shots_averaged
 
 def _mean_by_block(values, block_height, block_width):
     """Spread over each block the mean of its non-missing values.
