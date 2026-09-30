@@ -1,10 +1,17 @@
 # Changelog
 
+## [2.14.0] - 2026-09-30
+
+### Changed
+
+- The whole profile is averaged to 5 km × 180 m instead of only below 8.2 km, and the SR threshold is lowered by the number of native samples a block holds at each altitude.
+- The Gaussian averaging windows (`a`) are disabled at every level, since the signal is now averaged before level 5 runs, and the parameter `n` at level 5 for 532_par has been changed from 100000 to 10000.
+
 ## [2.13.0] - 2026-09-29
 
 ### Changed
 
-- The parameter k at level 5 for 1064 has been changed from 1 to 2.
+- The parameter `k` at level 5 for 1064 has been changed from 1 to 2.
 
 ## [2.12.0] - 2026-09-28
 
@@ -293,6 +300,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.14.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.13.0...v2.14.0
 [2.13.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.12.0...v2.13.0
 [2.12.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.11.0...v2.12.0
 [2.11.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.10.0...v2.11.0
