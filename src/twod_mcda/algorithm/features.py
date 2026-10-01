@@ -105,7 +105,7 @@ def _apply_detection_level(history, level, channel, sr_sigma, params):
     if a is not None:
         # Apply a gaussian 2-D window averaging
         history.sr, sr_sigma = gaussian_2d_window(
-            a[0], a[1], history.sr, history.feature, sr_sigma, a[2], a[3]
+            a[0], a[1], a[2], a[3], history.sr, history.feature, sr_sigma
         )
 
     # Apply threshold (at level 1, to get very high echo, likely PMT artifact)

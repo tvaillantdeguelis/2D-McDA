@@ -89,14 +89,14 @@ def get_feature_detection_coef(channel, level):
         'maybe' when detections fill at least half of that window.
     ``a``
         Gaussian averaging window applied to the signal before thresholding, as
-        ``(width_window, horizontal_gauss_sigma, height_window,
-         vertical_gauss_sigma)``: the window spans ``width_window`` profiles
-        (odd) by ``height_window`` altitude bins (odd), and the two sigmas, in
-        pixels, set how fast the Gaussian weights fall off horizontally and
-        vertically. ``height_window = 1`` gives a purely horizontal averaging,
-        and ``vertical_gauss_sigma`` is then unused. It is undefined at every
-        level for now, since the signal is brought to 5 km × 180 m before
-        level 5 runs.
+        ``(height_window, vertical_gauss_sigma, width_window,
+         horizontal_gauss_sigma)``: the window spans ``height_window``
+        altitude bins (odd) by ``width_window`` profiles (odd), and the two
+        sigmas, in pixels, set how fast the Gaussian weights fall off
+        vertically and horizontally. ``height_window = 1`` gives a purely
+        horizontal averaging, and ``vertical_gauss_sigma`` is then unused. It
+        is undefined at every level for now, since the signal is brought to
+        5 km × 180 m before level 5 runs.
     """
 
     if channel == "532_par":
