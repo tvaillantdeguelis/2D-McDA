@@ -48,7 +48,7 @@ def surf_search_region(surf_type, est_surf_alt, est_surf_alt_index, alt, params)
 
 def compute_deriv(ab, alt):
     """Compute the derivatives of the lidar signal"""
-    return (ab[:, :-1] - ab[:, 1:]) / (alt[np.newaxis, :-1] - alt[np.newaxis, 1:])
+    return (ab[:, 1:] - ab[:, :-1]) / (alt[np.newaxis, 1:] - alt[np.newaxis, :-1])
 
 
 def _nanargmin(values):
@@ -67,10 +67,10 @@ def get_min_max_deriv(deriv, alt, min_index_search_region, max_index_search_regi
 
     # Initialization
     nb_prof = deriv.shape[0]
-    i_min = np.ones(nb_prof, dtype=int) * FILL_VALUE_INT
-    i_max = np.ones(nb_prof, dtype=int) * FILL_VALUE_INT
-    alt_min = np.ones(nb_prof) * FILL_VALUE_FLOAT
-    alt_max = np.ones(nb_prof) * FILL_VALUE_FLOAT
+    i_deriv_min = np.ones(nb_prof, dtype=int) * FILL_VALUE_INT
+    i_deriv_max = np.ones(nb_prof, dtype=int) * FILL_VALUE_INT
+    alt_deriv_min = np.ones(nb_prof) * FILL_VALUE_FLOAT
+    alt_deriv_max = np.ones(nb_prof) * FILL_VALUE_FLOAT
 
     # Loop on each profile
     for i_prof in np.arange(nb_prof):
@@ -80,14 +80,14 @@ def get_min_max_deriv(deriv, alt, min_index_search_region, max_index_search_regi
         max_index = max_index_search_region[i_prof] + 1
 
         # Get indexes of min and max derivative in search region
-        i_min[i_prof] = _nanargmin(deriv[i_prof, min_index:max_index]) + min_index
-        i_max[i_prof] = _nanargmax(deriv[i_prof, min_index:max_index]) + min_index
+        i_deriv_min[i_prof] = _nanargmin(deriv[i_prof, min_index:max_index]) + min_index
+        i_deriv_max[i_prof] = _nanargmax(deriv[i_prof, min_index:max_index]) + min_index
 
         # Get corresponding altitude
-        alt_min[i_prof] = alt[i_min[i_prof]]
-        alt_max[i_prof] = alt[i_max[i_prof]]
+        alt_deriv_min[i_prof] = alt[i_deriv_min[i_prof]]
+        alt_deriv_max[i_prof] = alt[i_deriv_max[i_prof]]
 
-    return i_min, i_max, alt_min, alt_max
+    return i_deriv_min, i_deriv_max, alt_deriv_min, alt_deriv_max
 
 
 def get_max_ab_signal(ab, i_min, i_max):
@@ -117,10 +117,10 @@ def get_max_ab_signal(ab, i_min, i_max):
 
 
 def apply_surf_detection_rules(
-    i_min,
-    i_max,
-    alt_min,
-    alt_max,
+    i_deriv_min,
+    i_deriv_max,
+    alt_deriv_min,
+    alt_deriv_max,
     ab_max,
     ab_argmax,
     params,
@@ -139,8 +139,8 @@ def apply_surf_detection_rules(
     alt_surf = np.ones(nb_prof) * FILL_VALUE_FLOAT
 
     # Conditions
-    condition_1 = alt_min > alt_max
-    condition_2 = np.abs(i_min - i_max) <= params.N
+    condition_1 = alt_deriv_min > alt_deriv_max
+    condition_2 = i_deriv_min - i_deriv_max <= params.N
     condition_3 = ab_max > (params.coef_nb_std * rms_betap_surf)
     # #TEST#################
     # condition_4 = np.ones(ab_argmax.size, dtype=bool)
@@ -154,17 +154,17 @@ def apply_surf_detection_rules(
 
     for i in np.arange(nb_prof):
         if rules_passed[i]:
-            i_ab = i_min[i] + 1  # index just above (in altitude)
+            i_ab = i_deriv_min[i] + 1  # index just above (in altitude)
             if (deriv[i, i_ab] > 0) | (ab[i, i_ab] <= 0):
-                i_surf[i] = i_min[i]
-                alt_surf[i] = alt[i_min[i]]
+                i_surf[i] = i_deriv_min[i]
+                alt_surf[i] = alt[i_deriv_min[i]]
             else:
                 if channel == "1064":
-                    i_surf[i] = i_min[i] + 2
-                    alt_surf[i] = alt[i_min[i] + 2]
+                    i_surf[i] = i_deriv_min[i] + 2
+                    alt_surf[i] = alt[i_deriv_min[i] + 2]
                 else:
-                    i_surf[i] = i_min[i] + 1
-                    alt_surf[i] = alt[i_min[i] + 1]
+                    i_surf[i] = i_deriv_min[i] + 1
+                    alt_surf[i] = alt[i_deriv_min[i] + 1]
 
     return i_surf, alt_surf
 
@@ -238,18 +238,18 @@ def detect_surface(
     deriv = compute_deriv(ab, alt)
 
     # Get min and max of the derivative in search region
-    i_min, i_max, alt_min, alt_max = get_min_max_deriv(
+    i_deriv_min, i_deriv_max, alt_deriv_min, alt_deriv_max = get_min_max_deriv(
         deriv, alt, min_index_search_region, max_index_search_region
     )
 
     # Get maximum signal magnitude
-    ab_max, ab_argmax = get_max_ab_signal(ab, i_min, i_max)
+    ab_max, ab_argmax = get_max_ab_signal(ab, i_deriv_min, i_deriv_max)
 
     i_surf, alt_surf = apply_surf_detection_rules(
-        i_min,
-        i_max,
-        alt_min,
-        alt_max,
+        i_deriv_min,
+        i_deriv_max,
+        alt_deriv_min,
+        alt_deriv_max,
         ab_max,
         ab_argmax,
         params,
