@@ -50,10 +50,10 @@ def compute_par_ab532(tot_ab532, per_ab532, dim=LIDAR_ALTITUDE_DIMENSION):
 
 
 # Molecular and ozone cross sections for each wavelength, see Table 4.2 in
-# Hostetler et al. (2006; ATBD)
-MOL_BACKSCATTER_CROSS_SECT = {532: 5.982e-32, 1064: 3.620e-33}  # (m^2 / sr^-1)
+# Hostetler et al. (2006; ATBD) and CALIPSO Data Description and Quality Summary, Lidar Level 1B (V5)
+MOL_BACKSCATTER_CROSS_SECT = {532: 5.930e-32, 1064: 3.592e-33}  # (m^2 / sr^-1)
 MOL_EXT_CROSS_SECT = {532: 5.167e-31, 1064: 3.127e-32}  # (m^2)
-O3_EXT_CROSS_SECT_532 = 2.72846e-25  # (m^2), negligible at 1064 nm
+O3_EXT_CROSS_SECT_532 = 2.728461e-25  # (m^2), negligible at 1064 nm
 DEPOLAR_532 = 0.00366  # depolarization ratio (b_per/b_par) for Cabannes scattering
 
 
