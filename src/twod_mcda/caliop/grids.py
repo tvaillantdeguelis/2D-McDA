@@ -162,6 +162,28 @@ def regular_30m_grid_native_sample_sizes(wl, reverse_altitude=True):
     return vertical_size, horizontal_size
 
 
+def regular_30m_grid_pixels_per_native_sample(wl, reverse_altitude=True):
+    """
+    Return, for each level of the regular 30 m grid, the number of pixels that carry
+    one single native CALIOP measurement.
+
+    A native sample is copied over every level and profile it spans, so above 8.2 km
+    several pixels of the regular grid hold the same measurement, and the same noise
+    realization: 1 pixel below 8.2 km at 532 nm (2 at 1064 nm, downlinked at 60 m),
+    6 between 8.2 km and 20.2 km, 30 between 20.2 km and 30.1 km, and 150 above.
+    Counting pixels therefore counts one measurement up to 150 times, which is why
+    the detection levels weight each pixel by the inverse of this number.
+
+    reverse_altitude: if True, list the levels from bottom to top
+    """
+
+    vertical_size, horizontal_size = regular_30m_grid_native_sample_sizes(
+        wl, reverse_altitude
+    )
+
+    return vertical_size * horizontal_size
+
+
 def first_regular_30m_level_of_region_4(reverse_altitude=True):
     """
     Return the index, on the regular 30 m grid, of the lowest level of region 4
