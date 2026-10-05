@@ -132,13 +132,13 @@ def _mean_by_block(values, block_height, block_width):
     return np.repeat(np.repeat(mean, block_height, axis=0), block_width, axis=1)
 
 def gaussian_2d_window(
+    height_window,
+    vertical_gauss_sigma,
     width_window,
     horizontal_gauss_sigma,
     ab_signal,
     feature,
     ab_sigma,
-    height_window=7,
-    vertical_gauss_sigma=3,
 ):
     """Apply a 2-D gaussian averaging window to the AB signal"""
 

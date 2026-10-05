@@ -23,6 +23,7 @@ from twod_mcda.algorithm.smoothing import (
     remove_detect_from_sr,
 )
 from twod_mcda.caliop.constants import FILL_VALUE_FLOAT
+from twod_mcda.caliop.grids import regular_30m_grid_pixels_per_native_sample
 from twod_mcda.parameters import (
     FeatureDetectionParameters,
     get_feature_detection_coef,
@@ -84,7 +85,9 @@ class _DetectionHistory:
         return features, signals
 
 
-def _apply_detection_level(history, level, channel, sr_sigma, params):
+def _apply_detection_level(
+    history, level, channel, sr_sigma, params, pixels_per_sample
+):
     """Run one detection level on the current mask.
 
     The coefficients decide which steps apply, so the five levels differ only by
@@ -93,10 +96,14 @@ def _apply_detection_level(history, level, channel, sr_sigma, params):
     window the candidate pixels, and one whose threshold ``k`` is undefined does
     not apply to this channel at all.
 
+    ``pixels_per_sample`` is how many pixels of the regular grid one downlinked
+    CALIOP measurement covers at each altitude, which turns the pattern extent
+    into the number of measurements that the limit ``m`` applies to.
+
     Returns the noise threshold, which gaussian averaging lowers.
     """
 
-    k, n, s, a = get_feature_detection_coef(channel, level - 1)
+    k, n, m, s, a = get_feature_detection_coef(channel, level - 1)
 
     if k is None:
         # Level 1 only applies to the two 532 nm channels.
@@ -105,7 +112,7 @@ def _apply_detection_level(history, level, channel, sr_sigma, params):
     if a is not None:
         # Apply a gaussian 2-D window averaging
         history.sr, sr_sigma = gaussian_2d_window(
-            a[0], a[1], history.sr, history.feature, sr_sigma, a[2], a[3]
+            a[0], a[1], a[2], a[3], history.sr, history.feature, sr_sigma
         )
 
     # Apply threshold (at level 1, to get very high echo, likely PMT artifact)
@@ -117,7 +124,7 @@ def _apply_detection_level(history, level, channel, sr_sigma, params):
 
     # Flag 'Detected' where patterns of 'FLAG_MAYBE' pixels meet neighbors
     # number limit condition
-    history.feature = replace_maybe(n, history.feature, level)
+    history.feature = replace_maybe(n, m, pixels_per_sample, history.feature, level)
 
     if level == 1:
         # Flag 'Likely Artifact' below those high signal to some extent
@@ -152,6 +159,15 @@ def detect_features(
     # Get feature detection parameters
     params = FeatureDetectionParameters(channel)
 
+    # How many pixels of the regular grid one downlinked CALIOP measurement
+    # covers at each altitude: above 8.2 km the pixels are copies of each other,
+    # so a pattern holds fewer measurements than it holds pixels. This counts the
+    # measurements as downlinked, whatever averaging a level applies to them.
+    wavelength = 1064 if channel == "1064" else 532
+    pixels_per_sample = regular_30m_grid_pixels_per_native_sample(wavelength)[
+        : sr.shape[1]
+    ]
+
     history = _DetectionHistory(
         sr.copy(),
         np.zeros(sr.shape, dtype=np.uint8),
@@ -163,7 +179,9 @@ def detect_features(
     history.sr = remove_detect_from_sr(history.sr, history.feature)
 
     for level in (1, 2, 3, 4):
-        sr_sigma = _apply_detection_level(history, level, channel, sr_sigma, params)
+        sr_sigma = _apply_detection_level(
+            history, level, channel, sr_sigma, params, pixels_per_sample
+        )
 
     # Flag 'Fully Attenuated' from lowest altitude to first feature
     history.feature = fill_fully_attenuated(history.feature)
@@ -190,7 +208,9 @@ def detect_features(
     feature_before_averaging = history.feature
     history.sr = remove_detect_from_sr(history.sr, history.feature)
 
-    sr_sigma = _apply_detection_level(history, 5, channel, sr_sigma, params)
+    sr_sigma = _apply_detection_level(
+        history, 5, channel, sr_sigma, params, pixels_per_sample
+    )
 
     # Reput all not confident flags where overwritten during averaging
     history.feature = reput_low_confidence_flags(

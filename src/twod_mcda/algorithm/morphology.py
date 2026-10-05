@@ -106,9 +106,21 @@ def apply_window(
 
 @jit(nopython=True, cache=True)
 def replace_maybe_jit(
-    nb_lim, feature, seen_pixels, FLAG_DETECTION_LEVEL, prev_detect, prevprev_detect
+    nb_lim,
+    nb_samples_lim,
+    pixel_weight,
+    feature,
+    seen_pixels,
+    FLAG_DETECTION_LEVEL,
+    prev_detect,
+    prevprev_detect,
 ):
     """Classify connected components containing ``FLAG_MAYBE`` pixels.
+
+    A component is kept when it holds at least ``nb_lim`` pixels, its extent,
+    and at least ``nb_samples_lim`` independent measurements, its evidence. The
+    second count is the sum of the ``pixel_weight`` of its pixels, indexed by
+    altitude level.
 
     The queue is allocated once and reused for every component.  Besides
     avoiding a full-size temporary image per component, the head/tail indices
@@ -129,6 +141,7 @@ def replace_maybe_jit(
             tail = 1
             pixel_queue[0] = i * nb_cols + j
             seen_pixels[i, j] = True
+            nb_independent = pixel_weight[j]
             connected_to_detected_pattern = False
 
             while head < tail:
@@ -190,9 +203,11 @@ def replace_maybe_jit(
                         seen_pixels[neighbor_row, neighbor_col] = True
                         pixel_queue[tail] = neighbor_row * nb_cols + neighbor_col
                         tail += 1
+                        nb_independent += pixel_weight[neighbor_col]
 
             replacement = FLAG_DETECTION_LEVEL
-            if tail < nb_lim and not connected_to_detected_pattern:
+            too_small = tail < nb_lim or nb_independent < nb_samples_lim
+            if too_small and not connected_to_detected_pattern:
                 replacement = FLAG_NOTHING
 
             for queue_index in range(tail):
@@ -205,10 +220,26 @@ def replace_maybe_jit(
     return feature
 
 def replace_maybe(
-    n, feature, FLAG_DETECTION_LEVEL, prev_detect=True, prevprev_detect=False
+    n,
+    m,
+    pixels_per_sample,
+    feature,
+    FLAG_DETECTION_LEVEL,
+    prev_detect=True,
+    prevprev_detect=False,
 ):
     """Put flag 'FLAG_DETECTION_LEVEL' where patterns of connected 'FLAG_MAYBE'
-    pixels consist of at least n pixels
+    pixels consist of at least n pixels holding at least m independent
+    measurements
+
+    The two conditions say different things: n is the extent of the pattern, in
+    pixels of the uniform 30 m × 333 m grid, and m is how much independent
+    evidence supports it. ``pixels_per_sample`` is, for each altitude level, the
+    number of pixels carrying one single measurement, so that the measurements of
+    a pattern count as the sum over its pixels of 1 / pixels_per_sample. That
+    number is 1 below 8.2 km at 532 nm, where both conditions coincide, but one
+    measurement covers up to 150 pixels above 30.1 km, where a single noisy
+    measurement would otherwise fill enough pixels to pass n on its own.
     if prev_detect=True means that we also count detection pixels n-1
     if prevprev_detect=True means that we also count detection pixels n-2"""
 
@@ -216,13 +247,23 @@ def replace_maybe(
     new_feature = feature.copy()
     seen_pixels = np.zeros(new_feature.shape, dtype=bool)
 
+    # The Numba kernel indexes the weights by altitude level without checking
+    # their bounds, so a mismatched profile is caught here instead
+    if np.size(pixels_per_sample) != feature.shape[1]:
+        raise ValueError(
+            f"pixels_per_sample holds {np.size(pixels_per_sample)} levels, but the "
+            f"feature mask holds {feature.shape[1]}"
+        )
+
     # Look for a "maybe" pixel and decide if it's really part of a pattern
     # based on nb of neighbors (neighbors in "level n" + "level n-1")
-    if n == 1:  # keep all
+    if n == 1 and m == 1:  # keep all
         new_feature[new_feature == FLAG_MAYBE] = FLAG_DETECTION_LEVEL
     else:
         new_feature = replace_maybe_jit(
             n,
+            m,
+            1.0 / np.asarray(pixels_per_sample, dtype=np.float64),
             new_feature,
             seen_pixels,
             FLAG_DETECTION_LEVEL,

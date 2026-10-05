@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.15.0]
+
+### Added
+
+- A new feature-detection parameter `m` sets the minimum number of downlinked CALIOP measurements a pattern must hold, on top of the minimum number of pixels `n`.
+
+### Fixed
+
+- Fixed the false detections above 20.2 km.
+
 ## [2.14.0] - 2026-09-30
 
 ### Changed
@@ -300,6 +310,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.15.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.14.0...v2.15.0
 [2.14.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.13.0...v2.14.0
 [2.13.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.12.0...v2.13.0
 [2.12.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.11.0...v2.12.0
