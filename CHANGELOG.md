@@ -1,15 +1,14 @@
 # Changelog
 
-## [Unreleased]
+## [2.15.0]
 
 ### Added
 
-- A new feature-detection parameter `m` sets the minimum number of downlinked CALIOP measurements a pattern must hold, on top of the minimum number of pixels `n`. The two conditions say different things: `n` is the extent of the pattern, counted on the uniform 30 m × 333 m grid, so it means the same area at every altitude, while `m` is how much independent evidence supports it, since the pixels of that grid are copies of one another wherever CALIOP downlinks a coarser resolution. One measurement covers 1 pixel below 8.2 km at 532 nm (2 at 1064 nm), 6 between 8.2 km and 20.2 km, 30 between 20.2 km and 30.1 km, and 150 above, at every level and whatever averaging that level applies to the signal. `m` starts discarding the patterns of a region once it exceeds `n` divided by the pixels one measurement covers there, which at level 3 is 60 in region 2, 10 in region 3, 2 in region 4 and 0.4 in region 5.
+- A new feature-detection parameter `m` sets the minimum number of downlinked CALIOP measurements a pattern must hold, on top of the minimum number of pixels `n`.
 
 ### Fixed
 
-- Fixed the false detections above 20.2 km, where one noisy measurement fills 30 pixels between 20.2 km and 30.1 km and 150 pixels above, and therefore passed the condition on the pattern size `n` on its own at levels 3 and 4. On the granule 2022-01-16T15-08-09ZN (longitudes 166.09 → 153.96), the detections of the 532 nm parallel channel between 30.1 km and 40 km fall from 10.58 % to 0.97 % of the pixels and the number of detected patterns above 20.2 km falls from 2152 to 10, while the Hunga Tonga plume between 23 km and 31 km is kept. Below 20.2 km the condition is not reached by the patterns of a real feature: the detections between 8.2 km and 20.2 km change by 0.01 % of the pixels on that granule.
-- Removing those false detections also removes the low-confidence flags they caused in the whole column, since the weak-signal test only flags a region when a layer is detected above it. On the same granule, the 532 nm perpendicular channel below 8.2 km goes from 13.60 % to 5.48 % of pixels flagged 'almost fully attenuated', from 36.88 % to 33.07 % flagged 'fully attenuated' and from 22.39 % to 14.23 % flagged 'low confidence small strips', and its detections there rise from 2.02 % to 3.66 % as the freed pixels become eligible again at level 5.
+- Fixed the false detections above 20.2 km.
 
 ## [2.14.0] - 2026-09-30
 
@@ -311,6 +310,7 @@
 - Initial tagged release of the two-dimensional, multi-channel CALIOP feature-detection workflow.
 - Added batch and single-granule launch scripts and a reproducible Conda environment.
 
+[2.15.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.14.0...v2.15.0
 [2.14.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.13.0...v2.14.0
 [2.13.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.12.0...v2.13.0
 [2.12.0]: https://github.com/tvaillantdeguelis/2D-McDA/compare/v2.11.0...v2.12.0
