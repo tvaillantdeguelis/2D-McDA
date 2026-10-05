@@ -62,7 +62,7 @@ def build_output_variables(result, save_development_data):
             data["Profile_ID"],
             dimensions=(PROFILE_DIMENSION,),
             compress=False,
-            long_name="profile number from the start of the source granule",
+            long_name="profile identifier copied from the Level 1B file",
         ),
         "prof_time": _variable(
             "Profile_Time",
